@@ -1,29 +1,111 @@
+<!-- markdownlint-disable MD013 -->
+
 # Beast
 
-A Pug(formerly Jade)-style, indentation-based language that compiles `.btsx` files to TSX.
-Goal: eliminate closing tags and most angle brackets while staying a thin,
-predictable layer over real TypeScript/JSX — any embedded expression is
-parsed by the actual TypeScript compiler, so anything valid in TSX is valid
-inside Beast.
+> An indentation-first component language that compiles BTSX into native TSRX
+> for Octane.
 
-## Setup
+[![Status: Alpha](https://img.shields.io/badge/status-alpha-d97706?style=flat-square)](#project-status)
+[![Version](https://img.shields.io/badge/version-0.1.0-6f42c1?style=flat-square)](package.json)
+[![Node.js](https://img.shields.io/badge/Node.js-%E2%89%A522.22.2-339933?style=flat-square&logo=nodedotjs&logoColor=white)](package.json)
+[![Octane](https://img.shields.io/badge/Octane-0.1.32-111827?style=flat-square)](https://octanejs.dev/)
+[![License: ISC](https://img.shields.io/badge/license-ISC-0f766e?style=flat-square)](LICENSE)
+
+**Write the structure. Keep the types. Let Octane own rendering.**
+
+[Quick start](#quick-start) ·
+[How it works](#how-it-works) ·
+[Language reference](#language-reference) ·
+[CLI reference](#cli-reference) ·
+[Vite integration](#vite-integration) ·
+[Development](#development)
+
+---
+
+Beast is a small, source-located compiler for authoring
+[TSRX](https://tsrx.dev/) components with indentation instead of closing tags.
+It turns `.btsx` files into readable `.tsrx`, preserves native Octane template
+control flow, and integrates with [Octane](https://octanejs.dev/) and
+[Vite](https://vite.dev/) for application builds.
+
+Beast does not replace TypeScript, TSRX, Octane, or Vite. It owns the compact
+authoring layer and hands generated TSRX to the existing toolchain for final
+validation, lowering, development serving, and production bundling.
+
+## At a glance
+
+| Capability | What it does | Why it matters |
+| --- | --- | --- |
+| BTSX compiler | Converts indentation-based `.btsx` into native `.tsrx` | Keeps generated output inspectable |
+| Native control flow | Emits Octane `@if` and `@for` blocks | Preserves TSRX semantics and identity |
+| Project builder | Recursively compiles BTSX and validates native TSRX | Supports mixed source trees |
+| Vite integration | Runs Beast before Octane in memory | Enables normal dev and production builds |
+| Diagnostics | Reports stable codes with file and source spans | Makes compiler failures actionable |
+| Project creator | Scaffolds a typed Beast, Octane, and Vite application | Provides a coherent starting point |
+
+## Quick start
+
+Create a project with Bun:
 
 ```bash
-npm install
+bun create beast@latest
 ```
 
-## Compile a file
+Pass a directory to skip the prompt:
 
 ```bash
-npx ts-node src/index.ts examples/card.btsx examples/card.tsx \
-  --props "{ user, unreadCount, messages }: { user: { name: string; id: string; isAdmin: boolean }; unreadCount: number; messages: { id: string; text: string }[] }"
+bun create beast@latest my-app
+cd my-app
+bun run dev
 ```
 
-`--props` takes the **full parameter text** (destructuring pattern + type),
-so bare identifiers used in `#{...}` interpolations resolve directly. If you
-omit `--props`, the generated component takes no parameters.
+The equivalent direct package-executor form is:
 
-## Syntax
+```bash
+bun x create-beast@latest my-app
+```
+
+The generated project includes:
+
+- Beast and Octane configured as one Vite compilation pipeline
+- A typed `App.btsx` component
+- TSRX-aware TypeScript checking through `tsrx-tsc`
+- Development, production build, preview, type-check, and combined check scripts
+- A focused `.gitignore` and an optional initialized Git repository
+
+> [!IMPORTANT]
+> The workspace packages are publish-ready but are not yet available from the
+> public npm registry. The creation commands above become live after
+> `beast-tsrx` and `create-beast` are published.
+
+Creator options:
+
+| Option | Effect |
+| --- | --- |
+| `--no-install` | Write the project without running `bun install` |
+| `--no-git` | Skip `git init` |
+| `--force` | Write known template files into a non-empty directory without deleting unrelated files |
+| `-h`, `--help` | Print command help |
+
+## How it works
+
+```mermaid
+flowchart LR
+    A[.btsx source] --> B[Indentation-aware parser]
+    B --> C[Source-located Beast AST]
+    C --> D[TSRX generator]
+    D --> E[.tsrx source]
+    E --> F[Octane compiler]
+    F --> G[Vite module graph]
+    G --> H[Browser application]
+```
+
+Beast deliberately generates native TSRX rather than TSX-shaped intermediate
+code. Conditions and loops remain template operations, component output stays
+readable, and Octane remains the authority for TSRX syntax and runtime
+compilation.
+
+Given this BTSX:
 
 ```btsx
 .card
@@ -35,52 +117,443 @@ omit `--props`, the generated component takes no parameters.
     else
       p You have #{unreadCount} new messages
     ul.messages
-      each message, i in messages
-        li.message(key={message.id}) #{message.text}
+      each message, i in messages key message.id
+        li.message #{message.text}
 ```
 
-- **Indentation = nesting.** No closing tags.
-- **`.class`** and **`#id`** shorthand; a bare `.foo` or `#bar` with no tag
-  name defaults to `div`.
-- **Capitalized identifier** (`AdminPanel`, `Badge`) = a component reference;
-  lowercase (`div`, `h1`, `p`) = an HTML tag.
-- **`tag(attr="literal" attr={expr} boolAttr)`** — attributes in parens,
-  comma- or space-separated. String, `{expression}`, or bare boolean forms.
-- **`#{expr}`** inline text interpolation.
-- **`if` / `elseif` / `else`** — compiles to a nested ternary.
-- **`each item[, index] in iterable`** — compiles to `iterable.map(...)`.
-  A `key` prop is auto-injected from the loop index onto a single root
-  element unless you already supplied your own `key`.
-- **`| some text`** — an explicit text-only line (for text that would
-  otherwise be mistaken for a tag/selector line).
-- **`// comment`** — dropped entirely.
+Beast produces this TSRX shape:
 
-## Architecture
-
+```tsrx
+export default function Card(
+  { user, unreadCount, messages }: {
+    user: { name: string; id: string; isAdmin: boolean };
+    unreadCount: number;
+    messages: { id: string; text: string }[];
+  },
+) @{
+  <div className="card">
+    <div className="header">
+      <h1>Welcome, {user.name}</h1>
+    </div>
+    <div className="body">
+      @if (user.isAdmin) {
+        <AdminPanel userId={user.id} />
+      } @else {
+        <p>You have {unreadCount} new messages</p>
+      }
+      <ul className="messages">
+        @for (const message of messages; index i; key message.id) {
+          <li className="message">{message.text}</li>
+        }
+      </ul>
+    </div>
+  </div>
+}
 ```
-.btsx source
-  → lexer.ts     (indentation-aware line splitting)
-  → parser.ts    (line-by-line scanning + indent-driven tree building → ast.ts)
-  → codegen.ts   (AST → real ts.JsxElement/... nodes via the TS Compiler API)
-  → printer      (ts.createPrinter().printFile(...) → TSX text)
+
+The CLI and project builder validate generated TSRX with Octane by default.
+Validation can be disabled for constrained compiler-only environments, but it
+should remain enabled in normal development and release workflows.
+
+## Language reference
+
+### Elements and nesting
+
+Indentation defines the template tree. Indentation must use spaces; tabs are
+rejected with a source-located diagnostic.
+
+```btsx
+main.page
+  section#intro.hero
+    h1 Beast
+    p Indentation becomes structure.
 ```
 
-Embedded expressions (`#{...}`, `attr={...}`, `if`/`each` conditions) are
-never hand-parsed as JS — they're handed to the real TypeScript parser via
-`exprParser.ts`, which parses a throwaway `const __x = (<expr>);` statement
-and extracts the initializer as a proper `ts.Expression` node. This is also
-where a subtle TS printer quirk is handled: literal text (strings/numbers)
-gets corrupted if a node from one source file is printed inside a tree from
-another, so parsed expression trees are recursively "desynthesized" (their
-position info stripped) before being spliced into the final output tree.
+Selectors follow a compact CSS-like form:
 
-## Known limitations (prototype)
+| BTSX | Meaning |
+| --- | --- |
+| `section` | HTML element |
+| `Card` | Component reference |
+| `.card` | `div` with class `card` |
+| `section.hero` | `section` with class `hero` |
+| `section#intro.hero` | `section` with ID `intro` and class `hero` |
 
-- No import handling — component references like `AdminPanel` are assumed to
-  already be in scope; you'll want to add auto-import resolution next.
-- No source maps back to the `.btsx` file.
-- Attribute values only support literal/expr/boolean forms, not spread
-  (`{...props}`).
-- Output isn't run through `ts.formatDiagnostics`-style pretty-printing
-  beyond what the TS printer gives by default — pipe it through Prettier if
-  you want stable formatting.
+Capitalized tag names are treated as component references. Beast does not yet
+declare or resolve imports, so referenced components must be in scope in the
+eventual TSRX module.
+
+### Attributes
+
+Attributes live in parentheses and may be separated by spaces or commas:
+
+```btsx
+Button(tone="primary" count={items.length} disabled) Continue
+```
+
+| Form | Output behavior |
+| --- | --- |
+| `name="value"` | Quoted string attribute |
+| `name='value'` | Single-quoted string attribute |
+| `name={expression}` | TypeScript expression attribute |
+| `disabled` | Boolean attribute |
+
+`class` is normalized to `className`. Selector shorthand and an explicit class
+are combined; conflicting ID declarations and duplicate explicit class
+attributes are rejected.
+
+### Text and interpolation
+
+Inline text follows an element selector. Use `#{...}` to embed an expression:
+
+```btsx
+p Hello, #{user.name}. You have #{messages.length} messages.
+```
+
+Use a pipe for a line that should be interpreted only as text:
+
+```btsx
+div.notice
+  | This line is text, not an element selector.
+```
+
+Literal text is escaped in generated TSRX. Embedded expressions remain source
+slices and receive their final syntax validation from Octane.
+
+### Conditions
+
+`if`, `elseif`, and `else` compile directly to native `@if` control flow:
+
+```btsx
+if status === "ready"
+  ReadyView
+elseif status === "loading"
+  LoadingView
+else
+  ErrorView
+```
+
+Branches must be adjacent and aligned at the same indentation level. Orphaned,
+empty, duplicate, or post-`else` branches produce compiler diagnostics.
+
+### Iteration and keys
+
+Loops compile directly to native `@for` blocks:
+
+```btsx
+each item in items
+  li #{item.label}
+
+each item, index in items key item.id
+  Row(item={item} position={index})
+```
+
+The supported header is:
+
+```text
+each item[, index] in iterable [key expression]
+```
+
+For compatibility, a `key={expression}` attribute on a loop's single root
+element is hoisted into the generated `@for` header. Beast never invents an
+index key: keys affect keyed rendering and hook identity, so they must be
+authored deliberately.
+
+### Comments and roots
+
+Lines beginning with `//` are omitted from output. A component with multiple
+root nodes, no root node, or a text-only root is wrapped in a TSRX fragment.
+
+## CLI reference
+
+After installing `beast-tsrx`, the `beast` binary supports single-component
+compilation and recursive source-tree builds.
+
+```text
+beast compile <input.btsx> [options]
+beast <input.btsx> [output.tsrx] [options]
+beast build [source-directory] [options]
+beast --help
+```
+
+### Compile a component
+
+```bash
+beast compile src/Card.btsx \
+  --output generated/Card.tsrx \
+  --component-name Card \
+  --props '{ title }: { title: string }'
+```
+
+| Option | Description | Default |
+| --- | --- | --- |
+| `-o`, `--output PATH` | Write TSRX to a specific path | Input path with `.tsrx` extension |
+| `--component-name NAME` | Override the generated component identifier | Derived from the filename |
+| `--props PARAMETER` | Set the complete function parameter, including its type | Empty parameter list |
+| `--no-validate` | Skip Octane validation | Validation enabled |
+
+The output path must differ from the input path. Parent directories are
+created as needed.
+
+### Build a source tree
+
+```bash
+beast build ./src --out-dir ./.beast
+```
+
+| Argument or option | Description | Default |
+| --- | --- | --- |
+| `source-directory` | Root recursively searched for `.btsx` and `.tsrx` | Current directory |
+| `--out-dir PATH` | Mirrored destination for generated TSRX | `<source-directory>/.beast` |
+| `--no-validate` | Skip validation of generated and native TSRX | Validation enabled |
+
+The builder ignores `.git`, `.beast`, `build`, `coverage`, `dist`, and
+`node_modules`. Discovery and manifest entries are sorted for deterministic
+output.
+
+Each build writes `beast-manifest.json` with the generated source path, output
+path, component name, and validated native TSRX files. Native `.tsrx` files are
+validated in place; they are not copied into the output directory.
+
+> [!NOTE]
+> The project builder does not delete stale output and does not replace an
+> application bundler. Octane and Vite remain responsible for producing a
+> deployable application.
+
+## Vite integration
+
+Use `beastOctane()` for projects containing Beast and native TSRX modules:
+
+```ts
+// vite.config.ts
+import { defineConfig } from "vite";
+import { beastOctane } from "beast-tsrx/vite";
+
+export default defineConfig({
+  plugins: [
+    beastOctane({
+      components: {
+        "src/App.btsx": {
+          propsParam: "{ title }: { title: string }",
+        },
+      },
+      octane: {
+        strong: true,
+      },
+    }),
+  ],
+});
+```
+
+Then import both source types normally:
+
+```ts
+import App from "./App.btsx";
+import { NativePanel } from "./NativePanel.tsrx";
+```
+
+The Beast pre-transform generates TSRX in memory and passes it to Octane's
+public bundler compiler. Native `.tsrx` modules go through Octane's direct Vite
+integration. HMR invalidation is forwarded for `.btsx` changes, and SSR
+transforms select Octane's server environment.
+
+`beast()` is also exported for advanced configurations that only need the
+BTSX pre-transform. Most applications should use `beastOctane()` exactly once.
+
+## Programmatic API
+
+### Compile source
+
+```ts
+import { compileBeast, compileBeastResult } from "beast-tsrx";
+
+const code = compileBeast(source, {
+  filename: "Card.btsx",
+  componentName: "Card",
+  propsParam: "{ title }: { title: string }",
+});
+
+const result = compileBeastResult(source, {
+  filename: "Card.btsx",
+});
+
+console.log(result.ast, result.code, result.diagnostics);
+```
+
+### Build a project
+
+```ts
+import { buildBeastProject } from "beast-tsrx";
+
+const result = await buildBeastProject({
+  root: "src",
+  outDir: ".beast",
+  components: {
+    "components/Card.btsx": {
+      componentName: "Card",
+      propsParam: "{ title }: { title: string }",
+    },
+  },
+});
+
+console.log(result.manifestPath);
+```
+
+Component configuration keys are POSIX-style paths relative to the project
+root. The same shape is accepted by the Vite integration.
+
+### Exports
+
+| Export | Purpose |
+| --- | --- |
+| `compileBeast()` | Compile BTSX source and return TSRX code |
+| `compileBeastResult()` | Return generated code, the source-located AST, and diagnostics |
+| `parse()` | Parse BTSX into the public Beast AST |
+| `componentNameFromPath()` | Derive and sanitize a component identifier from a path |
+| `buildBeastProject()` | Compile and validate a recursive source tree |
+| `resolveProjectPath()` | Resolve project-relative configuration paths |
+| `BeastCompileError` | Structured compiler error carrying a stable diagnostic |
+| `formatDiagnostic()` | Render a diagnostic with source location and caret context |
+| `beast()` | Vite pre-transform for BTSX modules |
+| `beastOctane()` | Complete Vite integration for mixed BTSX and TSRX projects |
+
+Vite exports are available from `beast-tsrx/vite`; compiler and project exports
+are available from `beast-tsrx`.
+
+## Diagnostics
+
+Parser and generator failures throw `BeastCompileError`. Each diagnostic
+contains:
+
+- A stable `BEAST####_*` code
+- `error` or `warning` severity
+- A human-readable message
+- The source filename
+- Start and end offsets, lines, and columns
+- An optional remediation hint
+
+The CLI renders the failing source line with a caret marker. Syntax that Beast
+stores as embedded TypeScript source receives its final language-level
+validation from Octane.
+
+## Compatibility
+
+| Tool | Supported version | Role |
+| --- | --- | --- |
+| Node.js | `>=22.22.2` | Required by the supported Octane toolchain |
+| Bun | Current stable | Workspace, tests, project creation, and dependency installation |
+| TypeScript | `^5.9.3` | Package declarations and generated-project checking |
+| TSRX TypeScript plugin | `0.3.118` | `.tsrx` and `.btsx` project type checking |
+| Octane | `0.1.32` | TSRX validation, lowering, and runtime |
+| Vite | `^8.0.16` | Development server and production bundling |
+
+Octane and TSRX are evolving. Beast pins the versions used by its conformance
+suite and starter project so failures are reproducible.
+
+## Correctness contract
+
+The current suite and release checks verify the behavior Beast claims publicly:
+
+- BTSX fixtures must match committed TSRX output byte for byte.
+- Every golden TSRX fixture must compile through Octane without diagnostics.
+- Recursive builds must mirror paths and emit a versioned manifest.
+- Mixed `.btsx` and native `.tsrx` applications must complete a production
+  Vite build.
+- The project creator must preserve unrelated files, refuse accidental writes
+  to non-empty directories, and generate the expected toolchain configuration.
+- Packed `beast-tsrx` and `create-beast` artifacts must install into a clean
+  project whose type check and production build succeed.
+
+These checks protect the current contract. They do not imply production
+stability while Beast, Octane, and TSRX remain alpha-stage software.
+
+## Repository structure
+
+```text
+beast/
+├── src/
+│   ├── ast.ts                   # Public source-located Beast AST
+│   ├── parser.ts                # Indentation-aware BTSX parser
+│   ├── codegen.ts               # Beast AST to native TSRX
+│   ├── compiler.ts              # Public compilation entry points
+│   ├── diagnostics.ts           # Structured errors and formatting
+│   ├── project.ts               # Recursive source-tree builder
+│   ├── vite.ts                  # Beast and Octane Vite integration
+│   └── cli.ts                   # `beast` command-line adapter
+├── packages/create-beast/
+│   ├── src/index.ts             # Project creator CLI and API
+│   ├── template/                # Vite, Octane, TSRX, and BTSX starter
+│   └── tests/create.test.ts      # Creator safety and output tests
+├── examples/
+│   ├── card/                    # Golden BTSX and TSRX pair
+│   └── status/                  # Nested control-flow fixture
+├── tests/
+│   ├── compiler.test.ts         # Compiler and Octane conformance tests
+│   └── project.test.ts          # Project builder and Vite tests
+├── package.json                 # `beast-tsrx` package and workspace root
+└── tsconfig.json
+```
+
+## Development
+
+Requirements: Node.js 22.22.2 or newer and Bun.
+
+```bash
+git clone https://github.com/phtn/beast.git
+cd beast
+bun install --frozen-lockfile
+bun run check
+```
+
+| Script | Purpose |
+| --- | --- |
+| `bun run build` | Compile both publishable workspace packages |
+| `bun run typecheck` | Type-check both packages without emitting files |
+| `bun run test` | Run compiler, builder, Vite, and creator tests |
+| `bun run check` | Run type checking, tests, and builds in sequence |
+| `bun run pack:check` | Inspect both npm package tarballs without publishing |
+
+When changing the language or generator:
+
+1. Update the parser, AST, or generator at the smallest appropriate layer.
+2. Add or revise a paired `.btsx` and `.tsrx` golden fixture when output changes.
+3. Add diagnostic coverage for invalid syntax and ambiguous constructs.
+4. Run `bun run check` and both package dry runs.
+5. Confirm generated TSRX remains readable and valid through Octane.
+
+Focused issues and pull requests are welcome. Changes should preserve
+deterministic output, explicit keys, source-located failures, and the boundary
+between Beast authoring syntax and Octane compilation.
+
+## Project status
+
+Beast is an alpha compiler with a deliberately narrow initial language. The
+minimum compiler, recursive builder, Vite integration, and project creator are
+working and tested; the language and public API may still change before a
+stable release.
+
+Current limitations:
+
+- Props and imports do not yet have source-level BTSX declarations.
+- The CLI builder has no per-file configuration file; use the programmatic API
+  or Vite component options.
+- Spread attributes, explicit source fragments, raw style blocks, `@switch`,
+  `@try`/`@pending`/`@catch`, and `@empty` are not exposed in BTSX.
+- Beast-to-TSRX source maps are not implemented. Vite currently returns
+  Octane's map for the generated TSRX layer.
+- Standalone watch mode is not implemented; Vite owns watched application
+  builds.
+- Embedded expressions are preserved as source slices rather than parsed into
+  a TypeScript expression AST by Beast.
+- Tab indentation is intentionally unsupported.
+
+See the golden examples under [`examples/`](examples/) for the exact supported
+output contract.
+
+## License
+
+Released under the [ISC License](LICENSE).
+
+---
+
+*A compact authoring layer for explicit, native Octane templates.*

@@ -1,0 +1,5 @@
+main.app
+  p.eyebrow BTSX → TSRX → Octane
+  h1 #{title}
+  p Start building in src/App.btsx.
+  a.button(href="https://tsrx.dev/" target="_blank" rel="noreferrer") Explore TSRX
