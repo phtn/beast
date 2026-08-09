@@ -1,0 +1,23 @@
+{
+  "name": "beast",
+  "version": "1.0.0",
+  "description": "A Pug-style, indentation-based language that compiles .btsx files to TSX.",
+  "main": "index.js",
+  "bin": {
+    "beast": "dist/index.js"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "tsc"
+  },
+  "keywords": ["btsx", "tsx", "jsx", "compiler", "react"],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "typescript": "^5.6.3"
+  },
+  "devDependencies": {
+    "@types/node": "^26.2.0",
+    "ts-node": "^10.9.2"
+  }
+}

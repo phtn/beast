@@ -1,0 +1,11 @@
+.card
+  .header
+    h1 Welcome, #{user.name}
+  .body
+    if user.isAdmin
+      AdminPanel(userId={user.id})
+    else
+      p You have #{unreadCount} new messages
+    ul.messages
+      each message, i in messages
+        li.message(key={message.id}) #{message.text}

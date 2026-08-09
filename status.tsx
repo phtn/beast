@@ -1,0 +1,3 @@
+export default function Status({ groups }: { groups: { id: string; title: string; status: string; items: { label: string; value: string }[] }[] }) {
+    return <div className="status-list">{(groups).map((group, gi) => (<div className="group" key={(group.id)}><h2>{(group.title)}</h2>{((group.status === "ok") ? <Badge tone="green">All good</Badge> : ((group.status === "warn") ? <Badge tone="yellow" pulse>Needs attention</Badge> : <Badge tone="red">Failing</Badge>))}<ul>{(group.items).map((item, __beastIndex) => (<li key={__beastIndex}>{(item.label)}: {(item.value)}</li>))}</ul></div>))}</div>;
+}

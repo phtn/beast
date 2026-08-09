@@ -1,0 +1,13 @@
+.status-list
+  each group, gi in groups
+    .group(key={group.id})
+      h2 #{group.title}
+      if group.status === "ok"
+        Badge(tone="green") All good
+      elseif group.status === "warn"
+        Badge(tone="yellow" pulse) Needs attention
+      else
+        Badge(tone="red") Failing
+      ul
+        each item in group.items
+          li #{item.label}: #{item.value}
