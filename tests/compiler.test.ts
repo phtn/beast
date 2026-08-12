@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { readdir, readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { compile } from "octane/compiler";
+import { renderToString } from "octane/server";
 import {
   BeastCompileError,
   compileBeast,
@@ -450,6 +451,48 @@ describe("BTSX to TSRX", () => {
 
     expect(octane.diagnostics).toHaveLength(0);
     expect(octane.code.length).toBeGreaterThan(0);
+  });
+
+  test("renders an external store's deterministic server snapshot", async () => {
+    const filename = resolve("examples/network/network.btsx");
+    const source = await readFile(filename, "utf8");
+    const result = compileBeastResult(source, { filename });
+
+    expect(result.code).toContain(
+      "useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot)",
+    );
+    const client = compile(result.code, filename.replace(/\.btsx$/u, ".tsrx"), {
+      mode: "client",
+      hmr: false,
+      dev: true,
+    });
+    expect(client.diagnostics).toHaveLength(0);
+    expect(client.code).toContain(
+      "useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot, 0)",
+    );
+
+    const server = compile(result.code, filename.replace(/\.btsx$/u, ".tsrx"), {
+      mode: "server",
+      hmr: false,
+      dev: true,
+    });
+    expect(server.diagnostics).toHaveLength(0);
+    expect(server.code).toContain(
+      "useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot, 0)",
+    );
+
+    const executable = server.code.replace(
+      "'octane/server'",
+      JSON.stringify(import.meta.resolve("octane/server")),
+    );
+    expect(executable).not.toBe(server.code);
+    const compiled = (await import(
+      `data:text/javascript;base64,${Buffer.from(executable).toString("base64")}`
+    )) as { default: Parameters<typeof renderToString>[0] };
+
+    expect(renderToString(compiled.default).html).toContain(
+      '<p class="network-status" role="status" aria-live="polite">Online</p>',
+    );
   });
 
   test("lets explicit compile options override source-level props", () => {

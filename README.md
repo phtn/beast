@@ -310,6 +310,29 @@ The same `ref={...}` attribute can be passed to a component that declares a
 ref prop; Beast does not require or insert a forwarding wrapper. See the
 complete [refs golden](examples/refs/refs.btsx).
 
+For state already owned outside Octane, keep subscription and snapshot
+functions stable at module scope, then call `useSyncExternalStore` from setup.
+Its third argument provides a deterministic server snapshot:
+
+```btsx
+import { useSyncExternalStore } from "octane";
+module
+  function subscribe(onStoreChange: () => void) {
+    window.addEventListener("online", onStoreChange);
+    return () => window.removeEventListener("online", onStoreChange);
+  }
+  function getSnapshot() { return navigator.onLine; }
+  function getServerSnapshot() { return true; }
+setup const isOnline = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+
+p(role="status") #{isOnline ? "Online" : "Offline"}
+```
+
+The complete [network golden](examples/network/network.btsx) subscribes to both
+browser connectivity events and cleans them up. Its conformance test also
+executes the server-compiled component, proving SSR uses `getServerSnapshot`
+without reading browser globals.
+
 ### Attributes
 
 Attributes live in parentheses and may be separated by spaces or commas:
@@ -698,6 +721,7 @@ beast/
 │   ├── deferred/                # Lazy boundaries and deferred hydration
 │   ├── editor/                  # Linked controlled input and native events
 │   ├── fragment/                # Multiple roots, text, and escaping
+│   ├── network/                 # External-store subscription and SSR snapshot
 │   ├── provider/                # Context provider and consumer hooks
 │   ├── refs/                    # Callback, object, and array refs
 │   ├── shortcut/                # Multiline source and effect cleanup

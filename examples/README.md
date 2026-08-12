@@ -18,6 +18,7 @@ goldens are also included in the published `beast-tsrx` package.
 | [`deferred`](deferred/deferred.btsx) | `lazy` under `Suspense`/`ErrorBoundary` plus visibility-triggered `Hydrate` composition |
 | [`editor`](editor/editor.btsx) | Strong-mode `useLinkedState`, controlled text input, native `onInput`, and form submission |
 | [`fragment`](fragment/fragment.btsx) | Multiple roots, text-only lines, comments, escaping, and interpolation |
+| [`network`](network/network.btsx) | Stable browser subscription and deterministic SSR with `useSyncExternalStore` |
 | [`provider`](provider/provider.btsx) | Module-scoped Context, dotted provider, and `use()`/`useContext()` consumers |
 | [`refs`](refs/refs.btsx) | An object ref plus callback ref array and callback cleanup |
 | [`shortcut`](shortcut/shortcut.btsx) | Multiline module/setup source, Strong mode, `useRef`, and effect cleanup |
