@@ -436,6 +436,28 @@ optional pair of parentheses. Their TypeScript binding syntax is preserved for
 Octane to validate. Every authored boundary arm must contain at least one
 template node.
 
+Octane's component boundaries and hydration strategies compose through normal
+imports, attributes, and nesting. A lazy component suspends into the nearest
+`Suspense`; a rejected load reaches the nearest `ErrorBoundary`. `Hydrate`
+keeps server-rendered content dormant until its strategy opens:
+
+```btsx
+import { ErrorBoundary, Hydrate, Suspense, lazy } from "octane";
+import { visible } from "octane/hydration";
+module const LazyAnalytics = lazy(() => import("./analytics.tsrx"));
+
+ErrorBoundary(fallback="The dashboard could not be loaded.")
+  Suspense(fallback="Loading analytics…")
+    LazyAnalytics(reportId={reportId})
+  Hydrate(when={visible({ rootMargin: "400px" })} split={false})
+    ReviewSummary(reportId={reportId})
+```
+
+This focused form opts out of Hydrate's child-chunk extraction while still
+deferring interactivity. Compiler-split Hydrate boundaries belong in a full
+SSR/hydration bundler lifecycle. See the complete
+[deferred golden](examples/deferred/deferred.btsx).
+
 ### Comments and roots
 
 Lines beginning with `//` are omitted from output. A component with multiple
@@ -673,6 +695,7 @@ beast/
 │   ├── card/                    # Conditions and a hoisted loop key
 │   ├── catalog/                 # Attributes and an explicit loop key
 │   ├── counter/                 # Octane state, memo, and effect hooks
+│   ├── deferred/                # Lazy boundaries and deferred hydration
 │   ├── editor/                  # Linked controlled input and native events
 │   ├── fragment/                # Multiple roots, text, and escaping
 │   ├── provider/                # Context provider and consumer hooks

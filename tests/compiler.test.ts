@@ -396,6 +396,62 @@ describe("BTSX to TSRX", () => {
     expect(octane.diagnostics).toHaveLength(0);
   });
 
+  test("composes lazy loading, runtime boundaries, and deferred hydration", () => {
+    const result = compileBeastResult(
+      [
+        'import { ErrorBoundary, Hydrate, Suspense, lazy } from "octane";',
+        'import { visible } from "octane/hydration";',
+        'module const LazyPanel = lazy(() => import("./Panel.tsrx"));',
+        "props { reportId }: { reportId: string }",
+        'ErrorBoundary(fallback="Dashboard failed.")',
+        '  Suspense(fallback="Loading dashboard…")',
+        "    LazyPanel(reportId={reportId})",
+        '  Hydrate(when={visible()} split={false})',
+        '    button(type="button") Open reviews',
+      ].join("\n"),
+      { filename: "DeferredDashboard.btsx" },
+    );
+
+    expect(result.code).toContain(
+      'const LazyPanel = lazy(() => import("./Panel.tsrx"));',
+    );
+    expect(result.code).toContain('<ErrorBoundary fallback="Dashboard failed.">');
+    expect(result.code).toContain('<Suspense fallback="Loading dashboard…">');
+    expect(result.code).toContain('<Hydrate when={visible()} split={false}>');
+
+    const octane = compile(result.code, "DeferredDashboard.tsrx", {
+      mode: "client",
+      hmr: false,
+      dev: true,
+    });
+    expect(octane.diagnostics).toHaveLength(0);
+    expect(octane.code).toContain('lazy(() => import("./Panel.tsrx"))');
+    expect(octane.code).toContain("Hydrate");
+    expect(octane.code).toContain("Suspense");
+    expect(octane.code).not.toContain("octane-hydrate=");
+
+    const server = compile(result.code, "DeferredDashboard.tsrx", {
+      mode: "server",
+      hmr: false,
+      dev: true,
+    });
+    expect(server.diagnostics).toHaveLength(0);
+    expect(server.code).toContain("octane/server");
+  });
+
+  test("compiles the deferred fixture's lazy TSRX module", async () => {
+    const filename = resolve("examples/deferred/analytics.tsrx");
+    const source = await readFile(filename, "utf8");
+    const octane = compile(source, filename, {
+      mode: "client",
+      hmr: false,
+      dev: true,
+    });
+
+    expect(octane.diagnostics).toHaveLength(0);
+    expect(octane.code.length).toBeGreaterThan(0);
+  });
+
   test("lets explicit compile options override source-level props", () => {
     const output = compileBeast("props { value }: { value: string }\np #{value}\n", {
       filename: "Value.btsx",

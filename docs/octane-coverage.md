@@ -30,6 +30,7 @@ through `import`, `setup`, attributes, and nesting unchanged.
 | Empty lists | An aligned `empty` branch emits native `@empty` | `catalog` golden |
 | Multi-way branches | `switch`, `case`, and `default` emit native `@switch` arms | `variant` golden |
 | Async/error boundaries | `try`, `pending`, and bound `catch` emit native boundary arms | `boundary` golden |
+| Runtime boundary components | `lazy` composes under `Suspense` and `ErrorBoundary`; visibility-triggered `Hydrate` defers interactivity with eager child code | `deferred` golden |
 | Fragments and text holes | Automatic output fragments, text-only lines, escaping, and interpolation | `fragment` golden |
 | Context | Module-scoped `createContext`, dotted `Theme.Provider`, and local `use()`/`useContext()` consumers | `provider` golden |
 | Client bundling | Mixed BTSX/TSRX Vite application production build | project integration test |
@@ -44,7 +45,6 @@ do not yet have a focused Beast example or integration test.
 
 These do not generally need new BTSX grammar:
 
-- `Suspense`, `ErrorBoundary`, `lazy`, and `Hydrate` component composition.
 - `useSyncExternalStore`, transitions/actions, deferred values, view
   transitions, and portals.
 
@@ -61,7 +61,8 @@ props are dynamic.
 ### 3. Close application-integration gaps
 
 The Vite path has client production coverage, but still needs full lifecycle
-fixtures for server transforms, rendering, hydration, and deferred hydration.
+fixtures for server transforms, rendering, hydration, and compiler-split
+deferred hydration.
 After that, add Beast adapters or documented precompile workflows for Octane's
 Rspack and Rsbuild integrations. Framework-specific adapters should follow
 only when the core bundler contracts are stable.
@@ -76,9 +77,10 @@ non-Vite development workflow.
 
 The smallest dependency-aware sequence is:
 
-1. Suspense/ErrorBoundary and deferred-hydration runtime fixtures.
+1. External stores, transitions/actions, deferred values, view transitions,
+   and portals.
 2. Spread attributes, explicit fragments, and style blocks.
-3. Vite SSR/hydration integration fixtures.
+3. Vite SSR/hydration integration fixtures, including compiler-split Hydrate.
 4. Rspack/Rsbuild support, source maps, and standalone watch mode.
 
 [Quick start]: https://octanejs.dev/docs

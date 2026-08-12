@@ -15,6 +15,7 @@ goldens are also included in the published `beast-tsrx` package.
 | [`card`](card/card.btsx) | Nested elements, interpolation, conditions, and a hoisted loop key |
 | [`catalog`](catalog/catalog.btsx) | Attributes, explicit loop keys, and an `empty` fallback |
 | [`counter`](counter/counter.btsx) | `useState`, inferred-dependency `useMemo` and `useEffect`, and state-driven events |
+| [`deferred`](deferred/deferred.btsx) | `lazy` under `Suspense`/`ErrorBoundary` plus visibility-triggered `Hydrate` composition |
 | [`editor`](editor/editor.btsx) | Strong-mode `useLinkedState`, controlled text input, native `onInput`, and form submission |
 | [`fragment`](fragment/fragment.btsx) | Multiple roots, text-only lines, comments, escaping, and interpolation |
 | [`provider`](provider/provider.btsx) | Module-scoped Context, dotted provider, and `use()`/`useContext()` consumers |
@@ -32,3 +33,6 @@ bun src/cli.ts compile examples/catalog/catalog.btsx \
 
 When adding an example, use the same basename for both files. Example
 directories are discovered automatically by the conformance suite.
+
+The `deferred` fixture also contains `analytics.tsrx`, the native TSRX module
+loaded by its `lazy()` component.
