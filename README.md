@@ -231,6 +231,26 @@ module
 import { useEffect, useRef } from "octane";
 ```
 
+Module blocks may also contain local TSRX component declarations. This makes a
+module-scoped Context and its consumers self-contained:
+
+```btsx
+import { createContext, use } from "octane";
+module
+  const Theme = createContext("light");
+  function ThemeLabel() @{
+    const theme = use(Theme);
+    <p>{"Current theme: " + theme}</p>
+  }
+
+Theme.Provider(value={theme})
+  ThemeLabel
+```
+
+`use(Theme)` and `useContext(Theme)` both pass through unchanged. See the
+complete [provider golden](examples/provider/provider.btsx), which exercises
+both readers below a dotted provider.
+
 `setup` emits TypeScript inside the component's `@{ ... }` body before its
 rendered root. This is where local values and Octane hooks live. The inline
 form holds one statement; the block form holds multiline source such as an
@@ -655,7 +675,7 @@ beast/
 │   ├── counter/                 # Octane state, memo, and effect hooks
 │   ├── editor/                  # Linked controlled input and native events
 │   ├── fragment/                # Multiple roots, text, and escaping
-│   ├── provider/                # Dotted Context provider component
+│   ├── provider/                # Context provider and consumer hooks
 │   ├── refs/                    # Callback, object, and array refs
 │   ├── shortcut/                # Multiline source and effect cleanup
 │   ├── status/                  # Nested loops and branch chains

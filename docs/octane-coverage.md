@@ -31,7 +31,7 @@ through `import`, `setup`, attributes, and nesting unchanged.
 | Multi-way branches | `switch`, `case`, and `default` emit native `@switch` arms | `variant` golden |
 | Async/error boundaries | `try`, `pending`, and bound `catch` emit native boundary arms | `boundary` golden |
 | Fragments and text holes | Automatic output fragments, text-only lines, escaping, and interpolation | `fragment` golden |
-| Context-style component APIs | Dotted PascalCase component tags such as `Theme.Provider` are preserved | `provider` golden |
+| Context | Module-scoped `createContext`, dotted `Theme.Provider`, and local `use()`/`useContext()` consumers | `provider` golden |
 | Client bundling | Mixed BTSX/TSRX Vite application production build | project integration test |
 
 Every golden output is compared byte for byte and compiled with the pinned
@@ -44,7 +44,6 @@ do not yet have a focused Beast example or integration test.
 
 These do not generally need new BTSX grammar:
 
-- `use()`/`useContext` with a provider and consumer.
 - `Suspense`, `ErrorBoundary`, `lazy`, and `Hydrate` component composition.
 - `useSyncExternalStore`, transitions/actions, deferred values, view
   transitions, and portals.
@@ -77,7 +76,7 @@ non-Vite development workflow.
 
 The smallest dependency-aware sequence is:
 
-1. Context-consumer and async-boundary runtime fixtures.
+1. Suspense/ErrorBoundary and deferred-hydration runtime fixtures.
 2. Spread attributes, explicit fragments, and style blocks.
 3. Vite SSR/hydration integration fixtures.
 4. Rspack/Rsbuild support, source maps, and standalone watch mode.

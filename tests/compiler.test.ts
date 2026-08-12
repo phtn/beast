@@ -366,6 +366,36 @@ describe("BTSX to TSRX", () => {
     expect(octane.diagnostics).toHaveLength(0);
   });
 
+  test("compiles module-local context consumers and a dotted provider", () => {
+    const result = compileBeastResult(
+      [
+        'import { createContext, use, useContext } from "octane";',
+        "module",
+        '  const Theme = createContext("light");',
+        "  function ThemeReader() @{",
+        "    const direct = use(Theme);",
+        "    const explicit = useContext(Theme);",
+        '    <p>{direct + ":" + explicit}</p>',
+        "  }",
+        "props { theme }: { theme: string }",
+        "Theme.Provider(value={theme})",
+        "  ThemeReader",
+      ].join("\n"),
+      { filename: "ContextReader.btsx" },
+    );
+
+    expect(result.code).toContain('const Theme = createContext("light");');
+    expect(result.code).toContain("const direct = use(Theme);");
+    expect(result.code).toContain("const explicit = useContext(Theme);");
+    expect(result.code).toContain('<Theme.Provider value={theme}>');
+    const octane = compile(result.code, "ContextReader.tsrx", {
+      mode: "client",
+      hmr: false,
+      dev: true,
+    });
+    expect(octane.diagnostics).toHaveLength(0);
+  });
+
   test("lets explicit compile options override source-level props", () => {
     const output = compileBeast("props { value }: { value: string }\np #{value}\n", {
       filename: "Value.btsx",

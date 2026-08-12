@@ -1,6 +1,21 @@
-import { Theme } from "./theme.ts";
-props { theme, children }: { theme: "light" | "dark"; children: unknown }
+import { createContext, use, useContext } from "octane";
+module
+  type ThemeName = "light" | "dark";
+  const Theme = createContext<ThemeName>("light");
+
+  function ThemeLabel() @{
+    const theme = use(Theme);
+    <p class="theme-label">{"Current theme: " + theme}</p>
+  }
+
+  function ThemeSwatch() @{
+    const theme = useContext(Theme);
+    <span aria-label={"Theme swatch: " + theme} data-theme={theme} />
+  }
+props { theme, children }: { theme: ThemeName; children: unknown }
 
 Theme.Provider(value={theme})
   section.theme-shell(data-theme={theme})
+    ThemeLabel
+    ThemeSwatch
     | #{children}
