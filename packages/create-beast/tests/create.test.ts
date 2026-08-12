@@ -43,8 +43,11 @@ describe("create-beast", () => {
     ) as { name: string; dependencies: Record<string, string> };
     expect(packageJson.name).toBe("my-beast-app");
     expect(packageJson.dependencies["beast-tsrx"]).toBe("file:/local/beast-tsrx.tgz");
-    expect(await readFile(resolve(result.directory, "src", "App.btsx"), "utf8")).toContain(
-      "BTSX → TSRX → Octane",
+    const app = await readFile(resolve(result.directory, "src", "App.btsx"), "utf8");
+    expect(app).toContain("props { title }: { title: string }");
+    expect(app).toContain("BTSX → TSRX → Octane");
+    expect(await readFile(resolve(result.directory, "vite.config.ts"), "utf8")).toContain(
+      "plugins: [beastOctane()]",
     );
   });
 

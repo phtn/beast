@@ -5,6 +5,7 @@ import type {
   EachNode,
   ElementNode,
   IfNode,
+  SwitchNode,
   TextSpan,
 } from "./ast.js";
 import { BeastCompileError } from "./diagnostics.js";
@@ -13,6 +14,8 @@ export interface GenerateOptions {
   componentName: string;
   propsParam?: string;
 }
+
+const PRINT_WIDTH = 80;
 
 export function generateTsrx(document: BeastDocument, options: GenerateOptions): string {
   if (!/^[A-Za-z_$][A-Za-z0-9_$]*$/u.test(options.componentName)) {
@@ -25,14 +28,23 @@ export function generateTsrx(document: BeastDocument, options: GenerateOptions):
     });
   }
 
-  const parameter = options.propsParam?.trim() ?? "";
-  const lines = [`export default function ${options.componentName}(${parameter}) @{`];
+  const sourceProps = document.declarations.find((declaration) => declaration.kind === "props");
+  const parameter = (options.propsParam ?? sourceProps?.parameter ?? "").trim();
+  const imports = document.declarations.filter((declaration) => declaration.kind === "import");
+  const setup = document.declarations.filter((declaration) => declaration.kind === "setup");
+  const lines = imports.map((declaration) => declaration.code);
+  if (imports.length > 0) lines.push("");
+  lines.push(...generateComponentOpening(options.componentName, parameter));
+  if (setup.length > 0) {
+    for (const declaration of setup) lines.push(`${indent(1)}${declaration.code}`);
+    lines.push("");
+  }
   const rootNeedsFragment =
     document.children.length !== 1 || document.children[0]?.kind === "text";
   if (rootNeedsFragment) {
-    lines.push("  <>");
+    lines.push(`${indent(1)}<>`);
     for (const child of document.children) lines.push(...generateNode(child, 2, document));
-    lines.push("  </>");
+    lines.push(`${indent(1)}</>`);
   } else {
     const child = document.children[0];
     if (child !== undefined) lines.push(...generateNode(child, 1, document));
@@ -51,6 +63,8 @@ function generateNode(node: BeastNode, depth: number, document: BeastDocument): 
       return generateIf(node, depth, document);
     case "each":
       return generateEach(node, depth, document);
+    case "switch":
+      return generateSwitch(node, depth, document);
   }
 }
 
@@ -105,6 +119,30 @@ function generateEach(node: EachNode, depth: number, document: BeastDocument): s
     `${indent(depth)}@for (const ${node.itemName} of ${node.iterable}${options}) {`,
   ];
   for (const child of node.children) lines.push(...generateNode(child, depth + 1, document));
+  lines.push(`${indent(depth)}}`);
+  if (node.emptyChildren !== null) {
+    lines[lines.length - 1] = `${lines.at(-1)} @empty {`;
+    for (const child of node.emptyChildren) {
+      lines.push(...generateNode(child, depth + 1, document));
+    }
+    lines.push(`${indent(depth)}}`);
+  }
+  return lines;
+}
+
+function generateSwitch(node: SwitchNode, depth: number, document: BeastDocument): string[] {
+  const lines = [`${indent(depth)}@switch (${node.discriminant}) {`];
+  for (const branch of node.branches) {
+    lines.push(
+      branch.test === null
+        ? `${indent(depth + 1)}@default: {`
+        : `${indent(depth + 1)}@case ${branch.test}: {`,
+    );
+    for (const child of branch.children) {
+      lines.push(...generateNode(child, depth + 2, document));
+    }
+    lines.push(`${indent(depth + 1)}}`);
+  }
   lines.push(`${indent(depth)}}`);
   return lines;
 }
@@ -191,7 +229,134 @@ function escapeTemplateText(value: string): string {
 }
 
 function indent(depth: number): string {
-  return "  ".repeat(depth);
+  return "\t".repeat(depth);
+}
+
+function generateComponentOpening(componentName: string, parameter: string): string[] {
+  const prefix = `export default function ${componentName}(`;
+  const inline = `${prefix}${parameter}) @{`;
+  if (inline.length <= PRINT_WIDTH) return [inline];
+
+  const formatted = formatDestructuredObjectParameter(parameter);
+  if (formatted === null) return [inline];
+
+  const lines = [`${prefix}{`];
+  for (const binding of formatted.bindings) lines.push(`${indent(1)}${binding},`);
+  lines.push("}: {");
+  for (const member of formatted.typeMembers) {
+    lines.push(...formatTypeMember(member, 1));
+  }
+  lines.push("}) @{");
+  return lines;
+}
+
+function formatDestructuredObjectParameter(
+  parameter: string,
+): { bindings: string[]; typeMembers: string[] } | null {
+  const colon = findTopLevelCharacter(parameter, ":");
+  if (colon === -1) return null;
+
+  const binding = parameter.slice(0, colon).trim();
+  const type = parameter.slice(colon + 1).trim();
+  if (!isWholeDelimitedValue(binding, "{", "}") || !isWholeDelimitedValue(type, "{", "}")) {
+    return null;
+  }
+
+  const bindings = splitTopLevel(binding.slice(1, -1), ",");
+  const typeMembers = splitTopLevel(type.slice(1, -1), ";");
+  if (bindings.length === 0 || typeMembers.length === 0) return null;
+  return { bindings, typeMembers };
+}
+
+function formatTypeMember(member: string, depth: number): string[] {
+  const padding = indent(depth);
+  if (`${padding}${member};`.length <= PRINT_WIDTH) return [`${padding}${member};`];
+
+  const objectStart = findTopLevelCharacter(member, "{");
+  if (objectStart === -1) return [`${padding}${member};`];
+  const objectEnd = findMatchingDelimiter(member, objectStart);
+  if (objectEnd === -1) return [`${padding}${member};`];
+
+  const nestedMembers = splitTopLevel(member.slice(objectStart + 1, objectEnd), ";");
+  if (nestedMembers.length === 0) return [`${padding}${member};`];
+
+  const lines = [`${padding}${member.slice(0, objectStart + 1).trimEnd()}`];
+  for (const nestedMember of nestedMembers) {
+    lines.push(...formatTypeMember(nestedMember, depth + 1));
+  }
+  lines.push(`${padding}}${member.slice(objectEnd + 1).trim()};`);
+  return lines;
+}
+
+function isWholeDelimitedValue(value: string, opening: string, closing: string): boolean {
+  return (
+    value.startsWith(opening) &&
+    findMatchingDelimiter(value, 0) === value.length - 1 &&
+    value.endsWith(closing)
+  );
+}
+
+function splitTopLevel(value: string, separator: string): string[] {
+  const parts: string[] = [];
+  let start = 0;
+  scanDelimited(value, (character, index, depth) => {
+    if (character === separator && depth === 0) {
+      const part = value.slice(start, index).trim();
+      if (part.length > 0) parts.push(part);
+      start = index + 1;
+    }
+  });
+  const finalPart = value.slice(start).trim();
+  if (finalPart.length > 0) parts.push(finalPart);
+  return parts;
+}
+
+function findTopLevelCharacter(value: string, target: string): number {
+  let result = -1;
+  scanDelimited(value, (character, index, depth) => {
+    if (result === -1 && character === target && depth === 0) result = index;
+  });
+  return result;
+}
+
+function findMatchingDelimiter(value: string, openingIndex: number): number {
+  const opening = value[openingIndex];
+  if (opening !== "(" && opening !== "[" && opening !== "{") return -1;
+  const expectedClosing = opening === "(" ? ")" : opening === "[" ? "]" : "}";
+  let result = -1;
+  scanDelimited(value.slice(openingIndex), (character, index, depth) => {
+    if (result === -1 && character === expectedClosing && depth === 1) {
+      result = openingIndex + index;
+    }
+  });
+  return result;
+}
+
+function scanDelimited(
+  value: string,
+  visit: (character: string, index: number, depth: number) => void,
+): void {
+  const stack: string[] = [];
+  let quote: string | null = null;
+  let escaped = false;
+
+  for (let index = 0; index < value.length; index += 1) {
+    const character = value[index] ?? "";
+    if (quote !== null) {
+      if (escaped) escaped = false;
+      else if (character === "\\") escaped = true;
+      else if (character === quote) quote = null;
+      continue;
+    }
+    if (character === '"' || character === "'" || character === "`") {
+      quote = character;
+      continue;
+    }
+
+    visit(character, index, stack.length);
+    if (character === "(" || character === "[" || character === "{") stack.push(character);
+    else if (character === ")" || character === "]" || character === "}") stack.pop();
+  }
 }
 
 function codegenFailure(

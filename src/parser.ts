@@ -1,5 +1,6 @@
 import type {
   Attr,
+  BeastDeclaration,
   BeastDocument,
   BeastNode,
   EachNode,
@@ -7,6 +8,8 @@ import type {
   IfBranch,
   IfNode,
   SourceSpan,
+  SwitchBranch,
+  SwitchNode,
   TextSpan,
 } from "./ast.js";
 import { BeastCompileError } from "./diagnostics.js";
@@ -46,11 +49,13 @@ class Parser {
       );
     }
 
-    const children = first === undefined ? [] : this.parseBlock(0);
+    const declarations = this.parseDeclarations();
+    const children = this.lines[this.index] === undefined ? [] : this.parseBlock(0);
     const last = this.lines.at(-1);
     return {
       kind: "document",
       filename: this.filename,
+      declarations,
       children,
       span: {
         start: { offset: 0, line: 1, column: 1 },
@@ -64,6 +69,87 @@ class Parser {
               },
       },
     };
+  }
+
+  private parseDeclarations(): BeastDeclaration[] {
+    const declarations: BeastDeclaration[] = [];
+    let sawProps = false;
+
+    while (this.index < this.lines.length) {
+      const line = this.lines[this.index];
+      if (line === undefined || line.indent !== 0) break;
+
+      if (isImportDeclaration(line.content)) {
+        if (line.content === "import") {
+          this.fail(
+            "BEAST1504_EMPTY_IMPORT",
+            "An import declaration requires a module specifier.",
+            line,
+          );
+        }
+        declarations.push({
+          kind: "import",
+          code: line.content,
+          lineNo: line.lineNo,
+          span: lineSpan(line),
+        });
+        this.index += 1;
+        continue;
+      }
+
+      if (isPropsDeclaration(line.content)) {
+        if (sawProps) {
+          this.fail(
+            "BEAST1501_DUPLICATE_PROPS",
+            "A BTSX component can only declare props once.",
+            line,
+          );
+        }
+        const rawParameter = line.content.slice("props".length).trim();
+        const parameter = rawParameter.endsWith(";")
+          ? rawParameter.slice(0, -1).trimEnd()
+          : rawParameter;
+        if (parameter.length === 0) {
+          this.fail(
+            "BEAST1502_EMPTY_PROPS",
+            "A props declaration requires a typed function parameter.",
+            line,
+          );
+        }
+        declarations.push({
+          kind: "props",
+          parameter,
+          lineNo: line.lineNo,
+          span: lineSpan(line),
+        });
+        sawProps = true;
+        this.index += 1;
+        continue;
+      }
+
+      if (isSetupDeclaration(line.content)) {
+        const code = line.content.slice("setup".length).trim();
+        if (code.length === 0) {
+          this.fail(
+            "BEAST1505_EMPTY_SETUP",
+            "A setup declaration requires a TypeScript statement.",
+            line,
+          );
+        }
+        declarations.push({
+          kind: "setup",
+          code,
+          lineNo: line.lineNo,
+          span: lineSpan(line),
+        });
+        this.index += 1;
+        continue;
+      }
+
+      break;
+    }
+
+    return declarations;
   }
 
   private parseBlock(indent: number): BeastNode[] {
@@ -84,12 +170,44 @@ class Parser {
   }
 
   private parseNode(line: LogicalLine): BeastNode {
+    if (
+      isImportDeclaration(line.content) ||
+      isPropsDeclaration(line.content) ||
+      isSetupDeclaration(line.content)
+    ) {
+      this.fail(
+        "BEAST1503_MISPLACED_DECLARATION",
+        "Imports, props, and setup statements must be declared before template content.",
+        line,
+      );
+    }
     if (line.content.startsWith("if ")) return this.parseIf(line);
     if (line.content.startsWith("each ")) return this.parseEach(line);
+    if (line.content === "switch" || line.content.startsWith("switch ")) {
+      return this.parseSwitch(line);
+    }
+    if (line.content === "empty") {
+      this.fail(
+        "BEAST1407_ORPHAN_EMPTY",
+        "`empty` must immediately follow an each block at the same indentation.",
+        line,
+      );
+    }
     if (line.content === "else" || line.content.startsWith("elseif ")) {
       this.fail(
         "BEAST1301_ORPHAN_BRANCH",
         `\`${line.content.split(/\s/u, 1)[0]}\` must immediately follow an if branch at the same indentation.`,
+        line,
+      );
+    }
+    if (
+      line.content === "case" ||
+      line.content.startsWith("case ") ||
+      line.content === "default"
+    ) {
+      this.fail(
+        "BEAST1607_ORPHAN_SWITCH_ARM",
+        `\`${line.content.split(/\s/u, 1)[0]}\` must be nested directly inside a switch block.`,
         line,
       );
     }
@@ -214,6 +332,20 @@ class Parser {
       );
     }
 
+    let emptyChildren: BeastNode[] | null = null;
+    const emptyLine = this.lines[this.index];
+    if (emptyLine?.indent === line.indent && emptyLine.content === "empty") {
+      this.index += 1;
+      emptyChildren = this.parseChildren(emptyLine.indent);
+      if (emptyChildren.length === 0) {
+        this.fail(
+          "BEAST1408_EMPTY_EMPTY_BRANCH",
+          "An empty branch requires at least one template node.",
+          emptyLine,
+        );
+      }
+    }
+
     return {
       kind: "each",
       itemName,
@@ -221,6 +353,83 @@ class Parser {
       iterable: iterableAndKey,
       key: explicitKey ?? hoistedKey,
       children,
+      emptyChildren,
+      lineNo: line.lineNo,
+      span: lineSpan(line),
+    };
+  }
+
+  private parseSwitch(line: LogicalLine): SwitchNode {
+    const discriminant = line.content.slice("switch".length).trim();
+    if (discriminant.length === 0) {
+      this.fail("BEAST1601_EMPTY_SWITCH", "A switch block requires an expression.", line);
+    }
+
+    this.index += 1;
+    const firstArm = this.lines[this.index];
+    if (firstArm === undefined || firstArm.indent <= line.indent) {
+      this.fail(
+        "BEAST1602_EMPTY_SWITCH_BODY",
+        "A switch block requires at least one indented case or default arm.",
+        line,
+      );
+    }
+
+    const armIndent = firstArm.indent;
+    const branches: SwitchBranch[] = [];
+    let sawDefault = false;
+
+    while (this.index < this.lines.length) {
+      const armLine = this.lines[this.index];
+      if (armLine === undefined || armLine.indent < armIndent) break;
+      if (armLine.indent > armIndent) {
+        this.fail(
+          "BEAST1002_UNEXPECTED_INDENT",
+          "This line is indented more deeply than its surrounding switch block permits.",
+          armLine,
+        );
+      }
+
+      let test: string | null;
+      if (armLine.content === "case" || armLine.content.startsWith("case ")) {
+        test = armLine.content.slice("case".length).trim();
+        if (test.length === 0) {
+          this.fail("BEAST1604_EMPTY_CASE", "A case arm requires an expression.", armLine);
+        }
+      } else if (armLine.content === "default") {
+        if (sawDefault) {
+          this.fail(
+            "BEAST1605_DUPLICATE_DEFAULT",
+            "A switch block can only contain one default arm.",
+            armLine,
+          );
+        }
+        sawDefault = true;
+        test = null;
+      } else {
+        this.fail(
+          "BEAST1603_INVALID_SWITCH_ARM",
+          "Only case and default arms may appear directly inside a switch block.",
+          armLine,
+        );
+      }
+
+      this.index += 1;
+      const children = this.parseChildren(armLine.indent);
+      if (children.length === 0) {
+        this.fail(
+          "BEAST1606_EMPTY_SWITCH_ARM",
+          "A case or default arm requires at least one template node.",
+          armLine,
+        );
+      }
+      branches.push({ test, children, span: lineSpan(armLine) });
+    }
+
+    return {
+      kind: "switch",
+      discriminant,
+      branches,
       lineNo: line.lineNo,
       span: lineSpan(line),
     };
@@ -294,6 +503,18 @@ class Parser {
   }
 }
 
+function isImportDeclaration(content: string): boolean {
+  return content === "import" || /^import\s/u.test(content);
+}
+
+function isPropsDeclaration(content: string): boolean {
+  return content === "props" || /^props\s/u.test(content);
+}
+
+function isSetupDeclaration(content: string): boolean {
+  return content === "setup" || /^setup\s/u.test(content);
+}
+
 function createLogicalLines(source: string, filename: string): LogicalLine[] {
   const result: LogicalLine[] = [];
   let offset = 0;
@@ -343,6 +564,15 @@ function parseSelector(
     if (match === null) selectorFailure(selector, line, filename);
     tag = match[0];
     cursor = tag.length;
+
+    if (/^[A-Z]/u.test(tag)) {
+      while (selector[cursor] === ".") {
+        const member = selector.slice(cursor + 1).match(/^[A-Z_$][A-Za-z0-9_$]*/u);
+        if (member === null) break;
+        tag += `.${member[0]}`;
+        cursor += member[0].length + 1;
+      }
+    }
   }
 
   const classes: string[] = [];

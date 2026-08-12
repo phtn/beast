@@ -1,5 +1,5 @@
-import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
-import { dirname, isAbsolute, relative, resolve } from "node:path";
+import { lstat, mkdir, readdir, readFile, rmdir, unlink, writeFile } from "node:fs/promises";
+import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import { compileBeast, componentNameFromPath } from "./compiler.js";
 import type { CompileOptions } from "./compiler.js";
 
@@ -25,6 +25,7 @@ export interface ProjectBuildResult {
   root: string;
   outDir: string;
   generated: BuiltProjectFile[];
+  removed: string[];
   validatedNativeTsrx: string[];
   manifestPath: string;
 }
@@ -57,6 +58,8 @@ export async function buildBeastProject(
     throw new Error("The Beast project output directory must differ from the source root.");
   }
 
+  const manifestPath = resolve(outDir, "beast-manifest.json");
+  const previousOutputs = await readPreviousGeneratedOutputs(manifestPath);
   const files = await collectSourceFiles(root, outDir);
   const generated: BuiltProjectFile[] = [];
   const validatedNativeTsrx: string[] = [];
@@ -90,8 +93,12 @@ export async function buildBeastProject(
 
   generated.sort((left, right) => left.source.localeCompare(right.source));
   validatedNativeTsrx.sort();
+  const removed = await removeStaleGeneratedFiles(
+    outDir,
+    previousOutputs,
+    new Set(generated.map((file) => file.output)),
+  );
   await mkdir(outDir, { recursive: true });
-  const manifestPath = resolve(outDir, "beast-manifest.json");
   const manifest: BuildManifest = {
     schemaVersion: 1,
     generated: generated.map((file) => ({
@@ -103,7 +110,148 @@ export async function buildBeastProject(
   };
   await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
 
-  return { root, outDir, generated, validatedNativeTsrx, manifestPath };
+  return { root, outDir, generated, removed, validatedNativeTsrx, manifestPath };
+}
+
+async function readPreviousGeneratedOutputs(manifestPath: string): Promise<string[]> {
+  let source: string;
+  try {
+    source = await readFile(manifestPath, "utf8");
+  } catch (error) {
+    if (isFileSystemError(error, "ENOENT")) return [];
+    throw error;
+  }
+
+  let value: unknown;
+  try {
+    value = JSON.parse(source);
+  } catch {
+    return [];
+  }
+  if (!isRecord(value) || value.schemaVersion !== 1 || !Array.isArray(value.generated)) {
+    return [];
+  }
+
+  return value.generated.flatMap((entry) => {
+    if (
+      !isRecord(entry) ||
+      typeof entry.source !== "string" ||
+      typeof entry.output !== "string" ||
+      !entry.source.endsWith(".btsx") ||
+      entry.output !== entry.source.replace(/\.btsx$/u, ".tsrx")
+    ) {
+      return [];
+    }
+    return [entry.output];
+  });
+}
+
+async function removeStaleGeneratedFiles(
+  outDir: string,
+  previousOutputs: readonly string[],
+  currentOutputs: ReadonlySet<string>,
+): Promise<string[]> {
+  const staleOutputs = [...new Set(previousOutputs)]
+    .filter((output) => !currentOutputs.has(output))
+    .sort((left, right) => left.localeCompare(right));
+  const removed: string[] = [];
+
+  for (const output of staleOutputs) {
+    const target = await safeGeneratedFileTarget(outDir, output);
+    if (target === null) continue;
+
+    let targetStat: Awaited<ReturnType<typeof lstat>>;
+    try {
+      targetStat = await lstat(target);
+    } catch (error) {
+      if (isFileSystemError(error, "ENOENT")) continue;
+      throw error;
+    }
+    if (targetStat.isDirectory()) continue;
+
+    try {
+      await unlink(target);
+    } catch (error) {
+      if (isFileSystemError(error, "ENOENT")) continue;
+      throw error;
+    }
+    removed.push(output);
+    await removeEmptyGeneratedDirectories(dirname(target), outDir);
+  }
+
+  return removed;
+}
+
+async function safeGeneratedFileTarget(outDir: string, output: string): Promise<string | null> {
+  const normalized = toPosix(output);
+  const parts = normalized.split("/");
+  if (
+    !normalized.endsWith(".tsrx") ||
+    isAbsolute(output) ||
+    isAbsolute(normalized) ||
+    parts.some((part) => part.length === 0 || part === "." || part === "..")
+  ) {
+    return null;
+  }
+
+  const target = resolve(outDir, ...parts);
+  const targetRelative = relative(outDir, target);
+  if (
+    targetRelative.length === 0 ||
+    targetRelative === ".." ||
+    targetRelative.startsWith(`..${sep}`) ||
+    isAbsolute(targetRelative)
+  ) {
+    return null;
+  }
+
+  let parent = outDir;
+  for (const part of parts.slice(0, -1)) {
+    parent = resolve(parent, part);
+    try {
+      const parentStat = await lstat(parent);
+      if (parentStat.isSymbolicLink() || !parentStat.isDirectory()) return null;
+    } catch (error) {
+      if (isFileSystemError(error, "ENOENT")) return target;
+      throw error;
+    }
+  }
+  return target;
+}
+
+async function removeEmptyGeneratedDirectories(directory: string, outDir: string): Promise<void> {
+  let current = directory;
+  while (current !== outDir) {
+    const currentRelative = relative(outDir, current);
+    if (
+      currentRelative === ".." ||
+      currentRelative.startsWith(`..${sep}`) ||
+      isAbsolute(currentRelative)
+    ) {
+      return;
+    }
+    try {
+      await rmdir(current);
+    } catch (error) {
+      if (
+        isFileSystemError(error, "ENOENT") ||
+        isFileSystemError(error, "ENOTEMPTY") ||
+        isFileSystemError(error, "EEXIST")
+      ) {
+        return;
+      }
+      throw error;
+    }
+    current = dirname(current);
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function isFileSystemError(error: unknown, code: string): error is NodeJS.ErrnoException {
+  return error instanceof Error && "code" in error && error.code === code;
 }
 
 async function collectSourceFiles(root: string, outDir: string): Promise<string[]> {

@@ -1,0 +1,6 @@
+import { Theme } from "./theme.ts";
+props { theme, children }: { theme: "light" | "dark"; children: unknown }
+
+Theme.Provider(value={theme})
+  section.theme-shell(data-theme={theme})
+    | #{children}

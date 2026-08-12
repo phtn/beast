@@ -1,3 +1,4 @@
+props { title }: { title: string }
 main.app
   p.eyebrow BTSX → TSRX → Octane
   h1 #{title}

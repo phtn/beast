@@ -92,7 +92,7 @@ async function runBuild(rawArgs: string[]): Promise<number> {
     validate,
   });
   console.log(
-    `Built ${result.generated.length} BTSX component(s); validated ${result.validatedNativeTsrx.length} native TSRX file(s) in ${result.outDir}`,
+    `Built ${result.generated.length} BTSX component(s); removed ${result.removed.length} stale output(s); validated ${result.validatedNativeTsrx.length} native TSRX file(s) in ${result.outDir}`,
   );
   return 0;
 }

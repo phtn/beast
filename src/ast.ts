@@ -29,6 +29,23 @@ interface BaseNode {
   span: SourceSpan;
 }
 
+export interface ImportDeclaration extends BaseNode {
+  kind: "import";
+  code: string;
+}
+
+export interface PropsDeclaration extends BaseNode {
+  kind: "props";
+  parameter: string;
+}
+
+export interface SetupDeclaration extends BaseNode {
+  kind: "setup";
+  code: string;
+}
+
+export type BeastDeclaration = ImportDeclaration | PropsDeclaration | SetupDeclaration;
+
 export interface ElementNode extends BaseNode {
   kind: "element";
   tag: string;
@@ -63,13 +80,27 @@ export interface EachNode extends BaseNode {
   iterable: string;
   key: string | null;
   children: BeastNode[];
+  emptyChildren: BeastNode[] | null;
 }
 
-export type BeastNode = ElementNode | TextNode | IfNode | EachNode;
+export interface SwitchBranch {
+  test: string | null;
+  children: BeastNode[];
+  span: SourceSpan;
+}
+
+export interface SwitchNode extends BaseNode {
+  kind: "switch";
+  discriminant: string;
+  branches: SwitchBranch[];
+}
+
+export type BeastNode = ElementNode | TextNode | IfNode | EachNode | SwitchNode;
 
 export interface BeastDocument {
   kind: "document";
   filename: string;
+  declarations: BeastDeclaration[];
   children: BeastNode[];
   span: SourceSpan;
 }

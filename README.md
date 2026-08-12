@@ -16,6 +16,8 @@
 [Quick start](#quick-start) ·
 [How it works](#how-it-works) ·
 [Language reference](#language-reference) ·
+[Examples](examples/README.md) ·
+[Octane coverage](docs/octane-coverage.md) ·
 [CLI reference](#cli-reference) ·
 [Vite integration](#vite-integration) ·
 [Development](#development)
@@ -37,7 +39,8 @@ validation, lowering, development serving, and production bundling.
 | Capability | What it does | Why it matters |
 | --- | --- | --- |
 | BTSX compiler | Converts indentation-based `.btsx` into native `.tsrx` | Keeps generated output inspectable |
-| Native control flow | Emits Octane `@if` and `@for` blocks | Preserves TSRX semantics and identity |
+| Component setup | Emits local TypeScript and Octane hooks before the template root | Keeps stateful components self-contained |
+| Native control flow | Emits Octane `@if`, `@for`, `@empty`, and `@switch` blocks | Preserves TSRX semantics and identity |
 | Project builder | Recursively compiles BTSX and validates native TSRX | Supports mixed source trees |
 | Vite integration | Runs Beast before Octane in memory | Enables normal dev and production builds |
 | Diagnostics | Reports stable codes with file and source spans | Makes compiler failures actionable |
@@ -108,6 +111,9 @@ compilation.
 Given this BTSX:
 
 ```btsx
+import AdminPanel from "./AdminPanel.btsx";
+props { user, unreadCount, messages }: { user: { name: string; id: string; isAdmin: boolean }; unreadCount: number; messages: { id: string; text: string }[] }
+
 .card
   .header
     h1 Welcome, #{user.name}
@@ -124,30 +130,34 @@ Given this BTSX:
 Beast produces this TSRX shape:
 
 ```tsrx
-export default function Card(
-  { user, unreadCount, messages }: {
-    user: { name: string; id: string; isAdmin: boolean };
-    unreadCount: number;
-    messages: { id: string; text: string }[];
-  },
-) @{
-  <div className="card">
-    <div className="header">
-      <h1>Welcome, {user.name}</h1>
-    </div>
-    <div className="body">
-      @if (user.isAdmin) {
-        <AdminPanel userId={user.id} />
-      } @else {
-        <p>You have {unreadCount} new messages</p>
-      }
-      <ul className="messages">
-        @for (const message of messages; index i; key message.id) {
-          <li className="message">{message.text}</li>
-        }
-      </ul>
-    </div>
-  </div>
+import AdminPanel from "./AdminPanel.btsx";
+
+export default function Card({
+	user,
+	unreadCount,
+	messages,
+}: {
+	user: { name: string; id: string; isAdmin: boolean };
+	unreadCount: number;
+	messages: { id: string; text: string }[];
+}) @{
+	<div className="card">
+		<div className="header">
+			<h1>Welcome, {user.name}</h1>
+		</div>
+		<div className="body">
+			@if (user.isAdmin) {
+				<AdminPanel userId={user.id} />
+			} @else {
+				<p>You have {unreadCount} new messages</p>
+			}
+			<ul className="messages">
+				@for (const message of messages; index i; key message.id) {
+					<li className="message">{message.text}</li>
+				}
+			</ul>
+		</div>
+	</div>
 }
 ```
 
@@ -175,13 +185,56 @@ Selectors follow a compact CSS-like form:
 | --- | --- |
 | `section` | HTML element |
 | `Card` | Component reference |
+| `Theme.Provider` | Dotted component reference |
 | `.card` | `div` with class `card` |
 | `section.hero` | `section` with class `hero` |
 | `section#intro.hero` | `section` with ID `intro` and class `hero` |
 
-Capitalized tag names are treated as component references. Beast does not yet
-declare or resolve imports, so referenced components must be in scope in the
-eventual TSRX module.
+Capitalized tag names are treated as component references. Referenced
+components can be imported at the top of the BTSX file or otherwise be in
+scope in the eventual TSRX module. PascalCase or `_`/`$` segments after a
+capitalized tag are preserved as a dotted component API, so `Theme.Provider`
+emits `<Theme.Provider>`. A lowercase dotted suffix remains class shorthand:
+`Card.featured` emits `<Card className="featured">`.
+
+### Imports, props, and setup
+
+Top-level `import`, `props`, and `setup` declarations make a component
+self-contained. They must appear before the first template node and currently
+occupy one physical line each.
+
+```btsx
+import UserCard from "./UserCard.btsx";
+import type { User } from "./types.ts";
+props { user, compact = false }: { user: User; compact?: boolean }
+
+UserCard(user={user} compact={compact})
+```
+
+Imports are copied into generated TSRX in source order. Beast stores their
+contents as source slices and lets Octane perform final TypeScript syntax
+validation. A component may have one `props` declaration; its contents are the
+complete typed function parameter, with an optional trailing semicolon.
+Explicit `propsParam` options in the CLI, programmatic API, project builder, or
+Vite plugin override the source declaration.
+
+Each `setup` declaration contains one TypeScript statement emitted inside the
+component's `@{ ... }` body before its rendered root. This is where local
+values and Octane hooks live. Beast preserves the statement as a source slice;
+Octane performs its final syntax validation and hook lowering.
+
+```btsx
+import { useEffect, useMemo, useState } from "octane";
+props { initialCount, onCountChange }: { initialCount: number; onCountChange: (count: number) => void }
+setup const [count, setCount] = useState(initialCount);
+setup const doubled = useMemo(() => count * 2);
+setup useEffect(() => onCountChange(count));
+
+button(type="button" onClick={() => setCount(count + 1)}) Count: #{count}, doubled: #{doubled}
+```
+
+Dependency arguments are intentionally omitted in this example so Octane can
+infer them from each closure. See the complete [counter golden](examples/counter/counter.btsx).
 
 ### Attributes
 
@@ -246,6 +299,11 @@ each item in items
 
 each item, index in items key item.id
   Row(item={item} position={index})
+
+each result in results key result.id
+  SearchResult(result={result})
+empty
+  p No matches.
 ```
 
 The supported header is:
@@ -258,6 +316,29 @@ For compatibility, a `key={expression}` attribute on a loop's single root
 element is hoisted into the generated `@for` header. Beast never invents an
 index key: keys affect keyed rendering and hook identity, so they must be
 authored deliberately.
+
+An aligned `empty` branch immediately after a loop compiles to Octane's native
+`@empty` arm. It must contain at least one template node.
+
+### Multiple choices
+
+`switch`, `case`, and `default` compile to Octane's native `@switch` control
+flow. Arms are isolated and do not use `break`:
+
+```btsx
+switch status
+  case "ready"
+    ReadyView
+  case "loading"
+    LoadingView
+  default
+    ErrorView
+```
+
+The switch expression and every case expression remain TypeScript source
+slices for Octane to validate. Arms must be indented directly beneath their
+switch, contain at least one template node, and include no more than one
+`default`. A default arm is optional.
 
 ### Comments and roots
 
@@ -289,7 +370,7 @@ beast compile src/Card.btsx \
 | --- | --- | --- |
 | `-o`, `--output PATH` | Write TSRX to a specific path | Input path with `.tsrx` extension |
 | `--component-name NAME` | Override the generated component identifier | Derived from the filename |
-| `--props PARAMETER` | Set the complete function parameter, including its type | Empty parameter list |
+| `--props PARAMETER` | Override the complete function parameter, including its type | Source declaration or empty parameter list |
 | `--no-validate` | Skip Octane validation | Validation enabled |
 
 The output path must differ from the input path. Parent directories are
@@ -315,10 +396,15 @@ Each build writes `beast-manifest.json` with the generated source path, output
 path, component name, and validated native TSRX files. Native `.tsrx` files are
 validated in place; they are not copied into the output directory.
 
-> [!NOTE]
-> The project builder does not delete stale output and does not replace an
-> application bundler. Octane and Vite remain responsible for producing a
-> deployable application.
+After all current inputs compile and validate, Beast removes outputs recorded
+by the previous manifest that are no longer generated. Cleanup accepts only
+canonical `.tsrx` paths inside the output directory, skips symlinked parent
+directories, prunes directories only when they become empty, and never removes
+untracked files. Removed paths are returned as `result.removed` and reported by
+the CLI.
+
+The project builder does not replace an application bundler. Octane and Vite
+remain responsible for producing a deployable application.
 
 ## Vite integration
 
@@ -332,11 +418,6 @@ import { beastOctane } from "beast-tsrx/vite";
 export default defineConfig({
   plugins: [
     beastOctane({
-      components: {
-        "src/App.btsx": {
-          propsParam: "{ title }: { title: string }",
-        },
-      },
       octane: {
         strong: true,
       },
@@ -356,6 +437,10 @@ The Beast pre-transform generates TSRX in memory and passes it to Octane's
 public bundler compiler. Native `.tsrx` modules go through Octane's direct Vite
 integration. HMR invalidation is forwarded for `.btsx` changes, and SSR
 transforms select Octane's server environment.
+
+The `components` option remains available for per-file `componentName` and
+`propsParam` overrides. Source-level props are preferred when a component owns
+its public parameter type.
 
 `beast()` is also exported for advanced configurations that only need the
 BTSX pre-transform. Most applications should use `beastOctane()` exactly once.
@@ -396,7 +481,7 @@ const result = await buildBeastProject({
   },
 });
 
-console.log(result.manifestPath);
+console.log(result.manifestPath, result.removed);
 ```
 
 Component configuration keys are POSIX-style paths relative to the project
@@ -456,7 +541,8 @@ The current suite and release checks verify the behavior Beast claims publicly:
 
 - BTSX fixtures must match committed TSRX output byte for byte.
 - Every golden TSRX fixture must compile through Octane without diagnostics.
-- Recursive builds must mirror paths and emit a versioned manifest.
+- Recursive builds must mirror paths, emit a versioned manifest, and safely
+  remove only stale outputs tracked by the previous manifest.
 - Mixed `.btsx` and native `.tsrx` applications must complete a production
   Vite build.
 - The project creator must preserve unrelated files, refuse accidental writes
@@ -485,8 +571,17 @@ beast/
 │   ├── template/                # Vite, Octane, TSRX, and BTSX starter
 │   └── tests/create.test.ts      # Creator safety and output tests
 ├── examples/
-│   ├── card/                    # Golden BTSX and TSRX pair
-│   └── status/                  # Nested control-flow fixture
+│   ├── README.md                # Example index and usage notes
+│   ├── app/                     # Imports and component composition
+│   ├── card/                    # Conditions and a hoisted loop key
+│   ├── catalog/                 # Attributes and an explicit loop key
+│   ├── counter/                 # Octane state, memo, and effect hooks
+│   ├── fragment/                # Multiple roots, text, and escaping
+│   ├── provider/                # Dotted Context provider component
+│   ├── status/                  # Nested loops and branch chains
+│   └── variant/                 # Multi-way switch output
+├── docs/
+│   └── octane-coverage.md       # Official-doc coverage map and roadmap
 ├── tests/
 │   ├── compiler.test.ts         # Compiler and Octane conformance tests
 │   └── project.test.ts          # Project builder and Vite tests
@@ -534,11 +629,12 @@ stable release.
 
 Current limitations:
 
-- Props and imports do not yet have source-level BTSX declarations.
 - The CLI builder has no per-file configuration file; use the programmatic API
   or Vite component options.
-- Spread attributes, explicit source fragments, raw style blocks, `@switch`,
-  `@try`/`@pending`/`@catch`, and `@empty` are not exposed in BTSX.
+- Source-level imports, props, and setup statements are currently single-line
+  declarations; multiline source blocks are not exposed in BTSX.
+- Spread attributes, explicit source fragments, raw style blocks, and
+  `@try`/`@pending`/`@catch` are not exposed in BTSX.
 - Beast-to-TSRX source maps are not implemented. Vite currently returns
   Octane's map for the generated TSRX layer.
 - Standalone watch mode is not implemented; Vite owns watched application
@@ -547,8 +643,10 @@ Current limitations:
   a TypeScript expression AST by Beast.
 - Tab indentation is intentionally unsupported.
 
-See the golden examples under [`examples/`](examples/) for the exact supported
-output contract.
+See the [golden example index](examples/README.md) for focused BTSX inputs and
+the exact generated TSRX output contract. The living
+[Octane coverage map](docs/octane-coverage.md) separates supported runtime APIs
+from BTSX syntax and integration work that still remains.
 
 ## License
 

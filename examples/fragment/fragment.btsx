@@ -1,0 +1,7 @@
+props { heading, count }: { heading: string; count: number }
+
+// Multiple roots compile to a native TSRX fragment.
+h1 #{heading}
+| This view intentionally has multiple roots.
+p.notice You have #{count} pending items.
+| Symbols stay safe: < > { } &.

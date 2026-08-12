@@ -1,0 +1,14 @@
+props { products, selectedId, onSelect }: { products: { id: string; name: string; price: number; featured: boolean }[]; selectedId: string | null; onSelect: (id: string) => void }
+
+section#catalog.catalog(aria-label="Product catalog")
+  h2 Products
+  ul.product-grid
+    each product, index in products key product.id
+      li.product-card(class={product.id === selectedId ? "selected" : ""} data-index={index})
+        if product.featured
+          span.badge Featured
+        h3 #{product.name}
+        p.price $#{product.price.toFixed(2)}
+        button(type="button" formNoValidate disabled={product.id === selectedId} onClick={() => onSelect(product.id)}) Select
+    empty
+      li.empty-state No products available.
