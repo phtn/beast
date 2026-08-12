@@ -95,7 +95,25 @@ export interface SwitchNode extends BaseNode {
   branches: SwitchBranch[];
 }
 
-export type BeastNode = ElementNode | TextNode | IfNode | EachNode | SwitchNode;
+export interface TryPendingBranch {
+  children: BeastNode[];
+  span: SourceSpan;
+}
+
+export interface TryCatchBranch {
+  bindings: string | null;
+  children: BeastNode[];
+  span: SourceSpan;
+}
+
+export interface TryNode extends BaseNode {
+  kind: "try";
+  children: BeastNode[];
+  pendingBranch: TryPendingBranch | null;
+  catchBranch: TryCatchBranch | null;
+}
+
+export type BeastNode = ElementNode | TextNode | IfNode | EachNode | SwitchNode | TryNode;
 
 export interface BeastDocument {
   kind: "document";

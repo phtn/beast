@@ -7,6 +7,7 @@ import type {
   IfNode,
   SwitchNode,
   TextSpan,
+  TryNode,
 } from "./ast.js";
 import { BeastCompileError } from "./diagnostics.js";
 
@@ -65,6 +66,8 @@ function generateNode(node: BeastNode, depth: number, document: BeastDocument): 
       return generateEach(node, depth, document);
     case "switch":
       return generateSwitch(node, depth, document);
+    case "try":
+      return generateTry(node, depth, document);
   }
 }
 
@@ -144,6 +147,34 @@ function generateSwitch(node: SwitchNode, depth: number, document: BeastDocument
     lines.push(`${indent(depth + 1)}}`);
   }
   lines.push(`${indent(depth)}}`);
+  return lines;
+}
+
+function generateTry(node: TryNode, depth: number, document: BeastDocument): string[] {
+  const lines = [`${indent(depth)}@try {`];
+  for (const child of node.children) {
+    lines.push(...generateNode(child, depth + 1, document));
+  }
+  lines.push(`${indent(depth)}}`);
+
+  if (node.pendingBranch !== null) {
+    lines[lines.length - 1] = `${lines.at(-1)} @pending {`;
+    for (const child of node.pendingBranch.children) {
+      lines.push(...generateNode(child, depth + 1, document));
+    }
+    lines.push(`${indent(depth)}}`);
+  }
+
+  if (node.catchBranch !== null) {
+    const bindings =
+      node.catchBranch.bindings === null ? "" : ` (${node.catchBranch.bindings})`;
+    lines[lines.length - 1] = `${lines.at(-1)} @catch${bindings} {`;
+    for (const child of node.catchBranch.children) {
+      lines.push(...generateNode(child, depth + 1, document));
+    }
+    lines.push(`${indent(depth)}}`);
+  }
+
   return lines;
 }
 

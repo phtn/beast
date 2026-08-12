@@ -148,6 +148,92 @@ describe("BTSX to TSRX", () => {
     expect(error.diagnostic.code).toBe(code);
   });
 
+  test("emits pending and catch boundaries with optional bindings", () => {
+    const result = compileBeastResult(
+      [
+        "try",
+        "  Profile(data={data})",
+        "pending",
+        "  p Loading profile…",
+        "catch (error, reset)",
+        '  button(type="button" onClick={reset}) #{String(error)}',
+      ].join("\n"),
+      { filename: "ProfileBoundary.btsx" },
+    );
+
+    expect(result.code).toContain(
+      "\t@try {\n\t\t<Profile data={data} />\n\t} @pending {\n\t\t<p>Loading profile…</p>\n\t} @catch (error, reset) {",
+    );
+    const node = result.ast.children[0];
+    expect(node?.kind).toBe("try");
+    if (node?.kind === "try") {
+      expect(node.pendingBranch?.children).toHaveLength(1);
+      expect(node.catchBranch?.bindings).toBe("error, reset");
+    }
+  });
+
+  test.each([
+    ["pending only", "try\n  Profile\npending\n  p Loading\n", "@pending {"],
+    ["catch only", "try\n  Profile\ncatch\n  p Failed\n", "@catch {"],
+    [
+      "unwrapped catch bindings",
+      "try\n  Profile\ncatch error, reset\n  button(onClick={reset}) #{String(error)}\n",
+      "@catch (error, reset) {",
+    ],
+  ])("supports %s try boundaries", (_label, source, expected) => {
+    expect(compileBeast(source, { filename: "Boundary.btsx" })).toContain(expected);
+  });
+
+  test.each([
+    ["invalid try header", "try value\n  p Value\n", "BEAST1701_INVALID_TRY_HEADER"],
+    ["empty try body", "try\npending\n  p Loading\n", "BEAST1702_EMPTY_TRY_BODY"],
+    [
+      "missing continuation",
+      "try\n  p Content\np After\n",
+      "BEAST1703_MISSING_TRY_BRANCH",
+    ],
+    [
+      "invalid pending header",
+      "try\n  p Content\npending value\n  p Loading\n",
+      "BEAST1704_INVALID_PENDING_HEADER",
+    ],
+    [
+      "empty pending branch",
+      "try\n  p Content\npending\n",
+      "BEAST1705_EMPTY_PENDING_BRANCH",
+    ],
+    [
+      "empty catch bindings",
+      "try\n  p Content\ncatch ()\n  p Failed\n",
+      "BEAST1706_INVALID_CATCH_BINDINGS",
+    ],
+    [
+      "empty catch branch",
+      "try\n  p Content\ncatch error\n",
+      "BEAST1707_EMPTY_CATCH_BRANCH",
+    ],
+    [
+      "pending after catch",
+      "try\n  p Content\ncatch\n  p Failed\npending\n  p Loading\n",
+      "BEAST1708_PENDING_AFTER_CATCH",
+    ],
+    [
+      "duplicate pending",
+      "try\n  p Content\npending\n  p One\npending\n  p Two\n",
+      "BEAST1709_DUPLICATE_PENDING",
+    ],
+    [
+      "duplicate catch",
+      "try\n  p Content\ncatch\n  p One\ncatch error\n  p Two\n",
+      "BEAST1710_DUPLICATE_CATCH",
+    ],
+    ["orphan pending", "pending\n  p Loading\n", "BEAST1711_ORPHAN_TRY_BRANCH"],
+    ["orphan catch", "catch error\n  p Failed\n", "BEAST1711_ORPHAN_TRY_BRANCH"],
+  ])("reports invalid try syntax for %s", (_label, source, code) => {
+    const error = getCompileError(source, "InvalidBoundary.btsx");
+    expect(error.diagnostic.code).toBe(code);
+  });
+
   test("emits source-level module and component declarations", () => {
     const result = compileBeastResult(
       [

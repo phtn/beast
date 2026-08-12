@@ -11,6 +11,9 @@ import type {
   SwitchBranch,
   SwitchNode,
   TextSpan,
+  TryCatchBranch,
+  TryNode,
+  TryPendingBranch,
 } from "./ast.js";
 import { BeastCompileError } from "./diagnostics.js";
 
@@ -186,6 +189,9 @@ class Parser {
     if (line.content === "switch" || line.content.startsWith("switch ")) {
       return this.parseSwitch(line);
     }
+    if (line.content === "try" || line.content.startsWith("try ")) {
+      return this.parseTry(line);
+    }
     if (line.content === "empty") {
       this.fail(
         "BEAST1407_ORPHAN_EMPTY",
@@ -208,6 +214,13 @@ class Parser {
       this.fail(
         "BEAST1607_ORPHAN_SWITCH_ARM",
         `\`${line.content.split(/\s/u, 1)[0]}\` must be nested directly inside a switch block.`,
+        line,
+      );
+    }
+    if (isPendingBranch(line.content) || isCatchBranch(line.content)) {
+      this.fail(
+        "BEAST1711_ORPHAN_TRY_BRANCH",
+        `\`${line.content.split(/\s/u, 1)[0]}\` must immediately follow a try block.`,
         line,
       );
     }
@@ -435,6 +448,131 @@ class Parser {
     };
   }
 
+  private parseTry(line: LogicalLine): TryNode {
+    if (line.content !== "try") {
+      this.fail("BEAST1701_INVALID_TRY_HEADER", "A try block does not accept a header expression.", line);
+    }
+
+    this.index += 1;
+    const children = this.parseChildren(line.indent);
+    if (children.length === 0) {
+      this.fail(
+        "BEAST1702_EMPTY_TRY_BODY",
+        "A try block requires at least one template node.",
+        line,
+      );
+    }
+
+    let pendingBranch: TryPendingBranch | null = null;
+    let catchBranch: TryCatchBranch | null = null;
+    let branchLine = this.lines[this.index];
+
+    if (branchLine?.indent === line.indent && isPendingBranch(branchLine.content)) {
+      if (branchLine.content !== "pending") {
+        this.fail(
+          "BEAST1704_INVALID_PENDING_HEADER",
+          "A pending branch does not accept bindings or an expression.",
+          branchLine,
+        );
+      }
+      this.index += 1;
+      const pendingChildren = this.parseChildren(branchLine.indent);
+      if (pendingChildren.length === 0) {
+        this.fail(
+          "BEAST1705_EMPTY_PENDING_BRANCH",
+          "A pending branch requires at least one template node.",
+          branchLine,
+        );
+      }
+      pendingBranch = { children: pendingChildren, span: lineSpan(branchLine) };
+      branchLine = this.lines[this.index];
+    }
+
+    if (branchLine?.indent === line.indent && isCatchBranch(branchLine.content)) {
+      const bindings = this.parseCatchBindings(branchLine);
+      this.index += 1;
+      const catchChildren = this.parseChildren(branchLine.indent);
+      if (catchChildren.length === 0) {
+        this.fail(
+          "BEAST1707_EMPTY_CATCH_BRANCH",
+          "A catch branch requires at least one template node.",
+          branchLine,
+        );
+      }
+      catchBranch = {
+        bindings,
+        children: catchChildren,
+        span: lineSpan(branchLine),
+      };
+    }
+
+    const trailingBranch = this.lines[this.index];
+    if (trailingBranch?.indent === line.indent) {
+      if (isPendingBranch(trailingBranch.content)) {
+        if (catchBranch !== null) {
+          this.fail(
+            "BEAST1708_PENDING_AFTER_CATCH",
+            "A pending branch must appear before the catch branch.",
+            trailingBranch,
+          );
+        }
+        this.fail(
+          "BEAST1709_DUPLICATE_PENDING",
+          "A try block can only contain one pending branch.",
+          trailingBranch,
+        );
+      }
+      if (isCatchBranch(trailingBranch.content)) {
+        this.fail(
+          "BEAST1710_DUPLICATE_CATCH",
+          "A try block can only contain one catch branch.",
+          trailingBranch,
+        );
+      }
+    }
+
+    if (pendingBranch === null && catchBranch === null) {
+      this.fail(
+        "BEAST1703_MISSING_TRY_BRANCH",
+        "A try block requires a pending branch, a catch branch, or both.",
+        line,
+      );
+    }
+
+    return {
+      kind: "try",
+      children,
+      pendingBranch,
+      catchBranch,
+      lineNo: line.lineNo,
+      span: lineSpan(line),
+    };
+  }
+
+  private parseCatchBindings(line: LogicalLine): string | null {
+    let bindings = line.content.slice("catch".length).trim();
+    if (bindings.length === 0) return null;
+    if (!bindings.startsWith("(")) return bindings;
+
+    const close = findMatchingDelimiter(bindings, 0);
+    if (close !== bindings.length - 1) {
+      this.fail(
+        "BEAST1706_INVALID_CATCH_BINDINGS",
+        "Catch bindings must be written after catch, with optional balanced parentheses.",
+        line,
+      );
+    }
+    bindings = bindings.slice(1, -1).trim();
+    if (bindings.length === 0) {
+      this.fail(
+        "BEAST1706_INVALID_CATCH_BINDINGS",
+        "Use `catch` without empty parentheses when no bindings are needed.",
+        line,
+      );
+    }
+    return bindings;
+  }
+
   private parseElement(line: LogicalLine): ElementNode {
     const selectorEnd = findSelectorEnd(line.content);
     const selector = line.content.slice(0, selectorEnd);
@@ -513,6 +651,14 @@ function isPropsDeclaration(content: string): boolean {
 
 function isSetupDeclaration(content: string): boolean {
   return content === "setup" || /^setup\s/u.test(content);
+}
+
+function isPendingBranch(content: string): boolean {
+  return content === "pending" || content.startsWith("pending ") || content.startsWith("pending(");
+}
+
+function isCatchBranch(content: string): boolean {
+  return content === "catch" || content.startsWith("catch ") || content.startsWith("catch(");
 }
 
 function createLogicalLines(source: string, filename: string): LogicalLine[] {

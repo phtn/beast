@@ -26,6 +26,7 @@ through `import`, `setup`, attributes, and nesting unchanged.
 | Keyed lists | Item/index bindings, explicit keys, and single-root key hoisting emit `@for` | `card`, `catalog`, `status` goldens |
 | Empty lists | An aligned `empty` branch emits native `@empty` | `catalog` golden |
 | Multi-way branches | `switch`, `case`, and `default` emit native `@switch` arms | `variant` golden |
+| Async/error boundaries | `try`, `pending`, and bound `catch` emit native boundary arms | `boundary` golden |
 | Fragments and text holes | Automatic output fragments, text-only lines, escaping, and interpolation | `fragment` golden |
 | Context-style component APIs | Dotted PascalCase component tags such as `Theme.Provider` are preserved | `provider` golden |
 | Client bundling | Mixed BTSX/TSRX Vite application production build | project integration test |
@@ -36,16 +37,7 @@ do not yet have a focused Beast example or integration test.
 
 ## Next additions
 
-### 1. Finish native TSRX directive coverage
-
-Add BTSX nodes and diagnostics for `try`, `pending`, and `catch` →
-`@try`/`@pending`/`@catch`.
-
-These are the remaining prominent output directives in Octane's introductory
-TSRX documentation. Async boundary syntax should include catch bindings and
-validate arm ordering and adjacency.
-
-### 2. Make source regions multiline
+### 1. Make source regions multiline
 
 Replace the one-line-only source declaration constraint with explicit
 multiline module and setup blocks. This unlocks readable effect cleanup,
@@ -55,14 +47,14 @@ reducers, callbacks, local helpers, context creation, and module-level
 The design must keep indentation unambiguous: source blocks should be clearly
 delimited rather than guessed from template-shaped TypeScript.
 
-### 3. Complete element-level TSRX syntax
+### 2. Complete element-level TSRX syntax
 
 Add spread attributes, an explicit source fragment form, and raw/scoped style
 blocks. Spread attributes are especially useful for wrapper components and for
 covering Octane's development-time native text-event checks when final host
 props are dynamic.
 
-### 4. Expand runtime conformance examples
+### 3. Expand runtime conformance examples
 
 These do not generally need new BTSX grammar after multiline setup exists:
 
@@ -76,7 +68,7 @@ These do not generally need new BTSX grammar after multiline setup exists:
 Keep examples focused: one golden per distinct compiler shape, with Octane
 runtime tests only where compilation cannot prove the behavior.
 
-### 5. Close application-integration gaps
+### 4. Close application-integration gaps
 
 The Vite path has client production coverage, but still needs full lifecycle
 fixtures for server transforms, rendering, hydration, and deferred hydration.
@@ -84,7 +76,7 @@ After that, add Beast adapters or documented precompile workflows for Octane's
 Rspack and Rsbuild integrations. Framework-specific adapters should follow
 only when the core bundler contracts are stable.
 
-### 6. Improve compiler tooling
+### 5. Improve compiler tooling
 
 Add Beast-to-TSRX source maps and a standalone watch mode. These are not Octane
 runtime capabilities, but they are required for complete diagnostics and a
@@ -94,12 +86,11 @@ non-Vite development workflow.
 
 The smallest dependency-aware sequence is:
 
-1. `@try`/`@pending`/`@catch`.
-2. Multiline module/setup blocks and module directives.
-3. Form, ref/effect, context-consumer, and async-boundary goldens.
-4. Spread attributes, explicit fragments, and style blocks.
-5. Vite SSR/hydration integration fixtures.
-6. Rspack/Rsbuild support, source maps, and standalone watch mode.
+1. Multiline module/setup blocks and module directives.
+2. Form, ref/effect, context-consumer, and async-boundary runtime fixtures.
+3. Spread attributes, explicit fragments, and style blocks.
+4. Vite SSR/hydration integration fixtures.
+5. Rspack/Rsbuild support, source maps, and standalone watch mode.
 
 [Quick start]: https://octanejs.dev/docs
 [Core APIs]: https://octanejs.dev/docs/core-apis

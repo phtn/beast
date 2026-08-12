@@ -40,7 +40,7 @@ validation, lowering, development serving, and production bundling.
 | --- | --- | --- |
 | BTSX compiler | Converts indentation-based `.btsx` into native `.tsrx` | Keeps generated output inspectable |
 | Component setup | Emits local TypeScript and Octane hooks before the template root | Keeps stateful components self-contained |
-| Native control flow | Emits Octane `@if`, `@for`, `@empty`, and `@switch` blocks | Preserves TSRX semantics and identity |
+| Native control flow | Emits Octane condition, loop, switch, and boundary directives | Preserves TSRX semantics and identity |
 | Project builder | Recursively compiles BTSX and validates native TSRX | Supports mixed source trees |
 | Vite integration | Runs Beast before Octane in memory | Enables normal dev and production builds |
 | Diagnostics | Reports stable codes with file and source spans | Makes compiler failures actionable |
@@ -340,6 +340,28 @@ slices for Octane to validate. Arms must be indented directly beneath their
 switch, contain at least one template node, and include no more than one
 `default`. A default arm is optional.
 
+### Loading and error boundaries
+
+`try` may be followed by `pending`, `catch`, or both. These compile directly to
+Octane's `@try`/`@pending`/`@catch` template boundaries:
+
+```btsx
+try
+  Profile(data={profileData})
+pending
+  p Loading profile…
+catch error, reset
+  .error
+    p Could not load profile: #{String(error)}
+    button(type="button" onClick={reset}) Try again
+```
+
+When both continuations are present, `pending` must come before `catch`. Catch
+bindings may be omitted, written directly after `catch`, or surrounded by one
+optional pair of parentheses. Their TypeScript binding syntax is preserved for
+Octane to validate. Every authored boundary arm must contain at least one
+template node.
+
 ### Comments and roots
 
 Lines beginning with `//` are omitted from output. A component with multiple
@@ -573,6 +595,7 @@ beast/
 ├── examples/
 │   ├── README.md                # Example index and usage notes
 │   ├── app/                     # Imports and component composition
+│   ├── boundary/                # Loading and error template boundaries
 │   ├── card/                    # Conditions and a hoisted loop key
 │   ├── catalog/                 # Attributes and an explicit loop key
 │   ├── counter/                 # Octane state, memo, and effect hooks
@@ -633,8 +656,8 @@ Current limitations:
   or Vite component options.
 - Source-level imports, props, and setup statements are currently single-line
   declarations; multiline source blocks are not exposed in BTSX.
-- Spread attributes, explicit source fragments, raw style blocks, and
-  `@try`/`@pending`/`@catch` are not exposed in BTSX.
+- Spread attributes, explicit source fragments, and raw style blocks are not
+  exposed in BTSX.
 - Beast-to-TSRX source maps are not implemented. Vite currently returns
   Octane's map for the generated TSRX layer.
 - Standalone watch mode is not implemented; Vite owns watched application

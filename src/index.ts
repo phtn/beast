@@ -17,6 +17,9 @@ export type {
   SwitchNode,
   TextNode,
   TextSpan,
+  TryCatchBranch,
+  TryNode,
+  TryPendingBranch,
 } from "./ast.js";
 export {
   compileBeast,

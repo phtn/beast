@@ -11,6 +11,7 @@ goldens are also included in the published `beast-tsrx` package.
 | Example | Demonstrates |
 | --- | --- |
 | [`app`](app/app.btsx) | Source imports, typed props, component composition, IDs, and dynamic classes |
+| [`boundary`](boundary/boundary.btsx) | Async `try`, `pending`, and bound `catch` output |
 | [`card`](card/card.btsx) | Nested elements, interpolation, conditions, and a hoisted loop key |
 | [`catalog`](catalog/catalog.btsx) | Attributes, explicit loop keys, and an `empty` fallback |
 | [`counter`](counter/counter.btsx) | `useState`, inferred-dependency `useMemo` and `useEffect`, and state-driven events |
