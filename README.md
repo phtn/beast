@@ -271,6 +271,25 @@ relative indentation, comments, and blank lines. It does not parse or rewrite
 the TypeScript; Octane performs final syntax validation and hook lowering. See
 the multiline [shortcut golden](examples/shortcut/shortcut.btsx).
 
+Refs are ordinary expression attributes. Octane accepts object refs, callback
+refs with optional cleanup, and nested arrays combining either form:
+
+```btsx
+import { useRef } from "octane";
+setup
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const reportInput = (element: HTMLInputElement | null) => {
+    onAttach(element);
+    if (element !== null) return () => onAttach(null);
+  };
+
+input(ref={[inputRef, reportInput]})
+```
+
+The same `ref={...}` attribute can be passed to a component that declares a
+ref prop; Beast does not require or insert a forwarding wrapper. See the
+complete [refs golden](examples/refs/refs.btsx).
+
 ### Attributes
 
 Attributes live in parentheses and may be separated by spaces or commas:
@@ -637,6 +656,7 @@ beast/
 │   ├── editor/                  # Linked controlled input and native events
 │   ├── fragment/                # Multiple roots, text, and escaping
 │   ├── provider/                # Dotted Context provider component
+│   ├── refs/                    # Callback, object, and array refs
 │   ├── shortcut/                # Multiline source and effect cleanup
 │   ├── status/                  # Nested loops and branch chains
 │   └── variant/                 # Multi-way switch output

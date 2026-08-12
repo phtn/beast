@@ -22,6 +22,7 @@ through `import`, `setup`, attributes, and nesting unchanged.
 | Components, typed props, children | Native elements, component references, source imports and typed props | `app`, `provider` goldens |
 | Setup and hooks | Inline TypeScript setup; `useState`, `useMemo`, and `useEffect` compile through Octane | `counter` golden |
 | Module/setup source | Inline and multiline raw TypeScript, module directives, comments, blank lines, refs, and effect cleanup | `shortcut` golden |
+| Refs | Object refs, callback refs with cleanup, and arrays of refs pass through as ordinary props | `refs`, `shortcut` goldens |
 | Native events and attributes | Expression, string, boolean, ARIA, data, class, ID, native `onInput`, and form events | `catalog`, `counter`, `editor` goldens |
 | Linked controlled state | Strong-mode `useLinkedState` reconciles editable state by source identity | `editor` golden |
 | Conditions | `if`, `elseif`, and `else` emit native `@if` arms | `card`, `status` goldens |
@@ -43,7 +44,6 @@ do not yet have a focused Beast example or integration test.
 
 These do not generally need new BTSX grammar:
 
-- Callback refs and arrays of refs.
 - `use()`/`useContext` with a provider and consumer.
 - `Suspense`, `ErrorBoundary`, `lazy`, and `Hydrate` component composition.
 - `useSyncExternalStore`, transitions/actions, deferred values, view
@@ -77,7 +77,7 @@ non-Vite development workflow.
 
 The smallest dependency-aware sequence is:
 
-1. Callback-ref, context-consumer, and async-boundary runtime fixtures.
+1. Context-consumer and async-boundary runtime fixtures.
 2. Spread attributes, explicit fragments, and style blocks.
 3. Vite SSR/hydration integration fixtures.
 4. Rspack/Rsbuild support, source maps, and standalone watch mode.

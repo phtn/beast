@@ -1,0 +1,14 @@
+module "use strong";
+import { useRef } from "octane";
+props { label, onAttach }: { label: string; onAttach: (element: HTMLInputElement | null) => void }
+setup
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const reportInput = (element: HTMLInputElement | null) => {
+    onAttach(element);
+    if (element !== null) return () => onAttach(null);
+  };
+
+section.ref-demo
+  label(htmlFor="multi-ref-input") #{label}
+  input#multi-ref-input(ref={[inputRef, reportInput]})
+  button(type="button" onClick={() => inputRef.current?.focus()}) Focus input

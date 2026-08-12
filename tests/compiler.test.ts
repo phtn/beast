@@ -338,6 +338,34 @@ describe("BTSX to TSRX", () => {
     expect(octane.diagnostics).toHaveLength(0);
   });
 
+  test("preserves callback and object ref arrays for Octane", () => {
+    const result = compileBeastResult(
+      [
+        'import { useRef } from "octane";',
+        "setup const inputRef = useRef<HTMLInputElement | null>(null);",
+        "setup const reportInput = (element: HTMLInputElement | null) => { report(element); return () => report(null); };",
+        "input(ref={[inputRef, reportInput]})",
+      ].join("\n"),
+      { filename: "MultiRef.btsx" },
+    );
+
+    expect(result.code).toContain('<input ref={[inputRef, reportInput]} />');
+    const input = result.ast.children[0];
+    expect(input?.kind).toBe("element");
+    if (input?.kind === "element") {
+      expect(input.attrs[0]).toMatchObject({
+        name: "ref",
+        value: { type: "expr", code: "[inputRef, reportInput]" },
+      });
+    }
+    const octane = compile(result.code, "MultiRef.tsrx", {
+      mode: "client",
+      hmr: false,
+      dev: true,
+    });
+    expect(octane.diagnostics).toHaveLength(0);
+  });
+
   test("lets explicit compile options override source-level props", () => {
     const output = compileBeast("props { value }: { value: string }\np #{value}\n", {
       filename: "Value.btsx",

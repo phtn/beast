@@ -18,6 +18,7 @@ goldens are also included in the published `beast-tsrx` package.
 | [`editor`](editor/editor.btsx) | Strong-mode `useLinkedState`, controlled text input, native `onInput`, and form submission |
 | [`fragment`](fragment/fragment.btsx) | Multiple roots, text-only lines, comments, escaping, and interpolation |
 | [`provider`](provider/provider.btsx) | A dotted Context provider component with nested output |
+| [`refs`](refs/refs.btsx) | An object ref plus callback ref array and callback cleanup |
 | [`shortcut`](shortcut/shortcut.btsx) | Multiline module/setup source, Strong mode, `useRef`, and effect cleanup |
 | [`status`](status/status.btsx) | Nested loops plus `elseif` and `else` branches |
 | [`variant`](variant/variant.btsx) | Multi-way `switch`, `case`, and `default` output |
