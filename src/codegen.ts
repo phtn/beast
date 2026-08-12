@@ -31,13 +31,21 @@ export function generateTsrx(document: BeastDocument, options: GenerateOptions):
 
   const sourceProps = document.declarations.find((declaration) => declaration.kind === "props");
   const parameter = (options.propsParam ?? sourceProps?.parameter ?? "").trim();
-  const imports = document.declarations.filter((declaration) => declaration.kind === "import");
   const setup = document.declarations.filter((declaration) => declaration.kind === "setup");
-  const lines = imports.map((declaration) => declaration.code);
-  if (imports.length > 0) lines.push("");
+  const lines: string[] = [];
+  for (const declaration of document.declarations) {
+    if (declaration.kind === "import" || declaration.kind === "module") {
+      lines.push(...declaration.code.split("\n"));
+    }
+  }
+  if (lines.length > 0) lines.push("");
   lines.push(...generateComponentOpening(options.componentName, parameter));
   if (setup.length > 0) {
-    for (const declaration of setup) lines.push(`${indent(1)}${declaration.code}`);
+    for (const declaration of setup) {
+      for (const codeLine of declaration.code.split("\n")) {
+        lines.push(codeLine.length === 0 ? "" : `${indent(1)}${codeLine}`);
+      }
+    }
     lines.push("");
   }
   const rootNeedsFragment =

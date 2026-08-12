@@ -197,11 +197,12 @@ capitalized tag are preserved as a dotted component API, so `Theme.Provider`
 emits `<Theme.Provider>`. A lowercase dotted suffix remains class shorthand:
 `Card.featured` emits `<Card className="featured">`.
 
-### Imports, props, and setup
+### Module code, imports, props, and setup
 
-Top-level `import`, `props`, and `setup` declarations make a component
-self-contained. They must appear before the first template node and currently
-occupy one physical line each.
+Top-level `module`, `import`, `props`, and `setup` declarations make a component
+self-contained. They must appear before the first template node. Imports and
+props occupy one physical line; module and setup source can be inline or use an
+indented block.
 
 ```btsx
 import UserCard from "./UserCard.btsx";
@@ -218,10 +219,22 @@ complete typed function parameter, with an optional trailing semicolon.
 Explicit `propsParam` options in the CLI, programmatic API, project builder, or
 Vite plugin override the source declaration.
 
-Each `setup` declaration contains one TypeScript statement emitted inside the
-component's `@{ ... }` body before its rendered root. This is where local
-values and Octane hooks live. Beast preserves the statement as a source slice;
-Octane performs its final syntax validation and hook lowering.
+`module` emits TypeScript at module scope. Use it for directives, types,
+context values, constants, and helper functions. A module directive such as
+`"use strong"` must remain before imports, just as it would in native TSRX:
+
+```btsx
+module
+  "use strong";
+  const shortcutKey = "/";
+
+import { useEffect, useRef } from "octane";
+```
+
+`setup` emits TypeScript inside the component's `@{ ... }` body before its
+rendered root. This is where local values and Octane hooks live. The inline
+form holds one statement; the block form holds multiline source such as an
+effect with cleanup:
 
 ```btsx
 import { useEffect, useMemo, useState } from "octane";
@@ -235,6 +248,12 @@ button(type="button" onClick={() => setCount(count + 1)}) Count: #{count}, doubl
 
 Dependency arguments are intentionally omitted in this example so Octane can
 infer them from each closure. See the complete [counter golden](examples/counter/counter.btsx).
+
+Indented source blocks end at the next nonblank line aligned with the
+declaration. Beast removes their common source indentation while preserving
+relative indentation, comments, and blank lines. It does not parse or rewrite
+the TypeScript; Octane performs final syntax validation and hook lowering. See
+the multiline [shortcut golden](examples/shortcut/shortcut.btsx).
 
 ### Attributes
 
@@ -601,6 +620,7 @@ beast/
 │   ├── counter/                 # Octane state, memo, and effect hooks
 │   ├── fragment/                # Multiple roots, text, and escaping
 │   ├── provider/                # Dotted Context provider component
+│   ├── shortcut/                # Multiline source and effect cleanup
 │   ├── status/                  # Nested loops and branch chains
 │   └── variant/                 # Multi-way switch output
 ├── docs/
@@ -654,8 +674,6 @@ Current limitations:
 
 - The CLI builder has no per-file configuration file; use the programmatic API
   or Vite component options.
-- Source-level imports, props, and setup statements are currently single-line
-  declarations; multiline source blocks are not exposed in BTSX.
 - Spread attributes, explicit source fragments, and raw style blocks are not
   exposed in BTSX.
 - Beast-to-TSRX source maps are not implemented. Vite currently returns

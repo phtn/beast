@@ -35,12 +35,15 @@ export function parse(source: string, filename = "<input>"): BeastDocument {
 
 class Parser {
   private index = 0;
+  private readonly physicalLines: string[];
 
   constructor(
     private readonly lines: LogicalLine[],
-    private readonly source: string,
+    source: string,
     private readonly filename: string,
-  ) {}
+  ) {
+    this.physicalLines = source.split("\n");
+  }
 
   parseDocument(): BeastDocument {
     const first = this.lines[0];
@@ -131,21 +134,40 @@ class Parser {
       }
 
       if (isSetupDeclaration(line.content)) {
-        const code = line.content.slice("setup".length).trim();
-        if (code.length === 0) {
-          this.fail(
-            "BEAST1505_EMPTY_SETUP",
-            "A setup declaration requires a TypeScript statement.",
-            line,
-          );
-        }
+        const code =
+          line.content === "setup"
+            ? this.parseSourceBlock(
+                line,
+                "BEAST1505_EMPTY_SETUP",
+                "A setup block requires indented TypeScript source.",
+              )
+            : line.content.slice("setup".length).trim();
         declarations.push({
           kind: "setup",
           code,
           lineNo: line.lineNo,
           span: lineSpan(line),
         });
-        this.index += 1;
+        if (line.content !== "setup") this.index += 1;
+        continue;
+      }
+
+      if (isModuleDeclaration(line.content)) {
+        const code =
+          line.content === "module"
+            ? this.parseSourceBlock(
+                line,
+                "BEAST1506_EMPTY_MODULE",
+                "A module block requires indented TypeScript source.",
+              )
+            : line.content.slice("module".length).trim();
+        declarations.push({
+          kind: "module",
+          code,
+          lineNo: line.lineNo,
+          span: lineSpan(line),
+        });
+        if (line.content !== "module") this.index += 1;
         continue;
       }
 
@@ -153,6 +175,43 @@ class Parser {
     }
 
     return declarations;
+  }
+
+  private parseSourceBlock(line: LogicalLine, code: string, message: string): string {
+    const blockLines: string[] = [];
+    let physicalIndex = line.lineNo;
+
+    while (physicalIndex < this.physicalLines.length) {
+      const raw = this.physicalLines[physicalIndex] ?? "";
+      if (raw.trim().length === 0) {
+        blockLines.push("");
+        physicalIndex += 1;
+        continue;
+      }
+
+      const leading = raw.match(/^ */u)?.[0].length ?? 0;
+      if (leading <= line.indent) break;
+      blockLines.push(raw.trimEnd());
+      physicalIndex += 1;
+    }
+
+    while (blockLines[0] === "") blockLines.shift();
+    while (blockLines.at(-1) === "") blockLines.pop();
+    if (blockLines.length === 0) this.fail(code, message, line);
+
+    const sourceIndent = Math.min(
+      ...blockLines
+        .filter((blockLine) => blockLine.length > 0)
+        .map((blockLine) => blockLine.match(/^ */u)?.[0].length ?? 0),
+    );
+    const sourceCode = blockLines
+      .map((blockLine) => (blockLine.length === 0 ? "" : blockLine.slice(sourceIndent)))
+      .join("\n");
+
+    while ((this.lines[this.index]?.lineNo ?? Infinity) <= physicalIndex) {
+      this.index += 1;
+    }
+    return sourceCode;
   }
 
   private parseBlock(indent: number): BeastNode[] {
@@ -175,12 +234,13 @@ class Parser {
   private parseNode(line: LogicalLine): BeastNode {
     if (
       isImportDeclaration(line.content) ||
+      isModuleDeclaration(line.content) ||
       isPropsDeclaration(line.content) ||
       isSetupDeclaration(line.content)
     ) {
       this.fail(
         "BEAST1503_MISPLACED_DECLARATION",
-        "Imports, props, and setup statements must be declared before template content.",
+        "Module code, imports, props, and setup statements must be declared before template content.",
         line,
       );
     }
@@ -643,6 +703,10 @@ class Parser {
 
 function isImportDeclaration(content: string): boolean {
   return content === "import" || /^import\s/u.test(content);
+}
+
+function isModuleDeclaration(content: string): boolean {
+  return content === "module" || /^module\s/u.test(content);
 }
 
 function isPropsDeclaration(content: string): boolean {

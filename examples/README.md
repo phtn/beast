@@ -17,6 +17,7 @@ goldens are also included in the published `beast-tsrx` package.
 | [`counter`](counter/counter.btsx) | `useState`, inferred-dependency `useMemo` and `useEffect`, and state-driven events |
 | [`fragment`](fragment/fragment.btsx) | Multiple roots, text-only lines, comments, escaping, and interpolation |
 | [`provider`](provider/provider.btsx) | A dotted Context provider component with nested output |
+| [`shortcut`](shortcut/shortcut.btsx) | Multiline module/setup source, Strong mode, `useRef`, and effect cleanup |
 | [`status`](status/status.btsx) | Nested loops plus `elseif` and `else` branches |
 | [`variant`](variant/variant.btsx) | Multi-way `switch`, `case`, and `default` output |
 

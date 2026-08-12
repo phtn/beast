@@ -263,6 +263,57 @@ describe("BTSX to TSRX", () => {
     ]);
   });
 
+  test("preserves multiline module and setup source blocks", () => {
+    const result = compileBeastResult(
+      [
+        "module",
+        '  "use strong";',
+        '  const shortcutKey = "/";',
+        "",
+        'import { useEffect, useRef } from "octane";',
+        "setup",
+        "  const inputRef = useRef<HTMLInputElement | null>(null);",
+        "",
+        "  // Preserve source comments and relative indentation.",
+        "  useEffect(() => {",
+        "    window.addEventListener(\"keydown\", focusInput);",
+        "    return () => window.removeEventListener(\"keydown\", focusInput);",
+        "  });",
+        "",
+        'input(ref={inputRef} aria-keyshortcuts={shortcutKey})',
+      ].join("\n"),
+      { filename: "Shortcut.btsx" },
+    );
+
+    expect(result.ast.declarations.map((declaration) => declaration.kind)).toEqual([
+      "module",
+      "import",
+      "setup",
+    ]);
+    expect(result.ast.declarations[0]).toMatchObject({
+      kind: "module",
+      code: '"use strong";\nconst shortcutKey = "/";',
+    });
+    expect(result.ast.declarations[2]).toMatchObject({
+      kind: "setup",
+      code: [
+        "const inputRef = useRef<HTMLInputElement | null>(null);",
+        "",
+        "// Preserve source comments and relative indentation.",
+        "useEffect(() => {",
+        '  window.addEventListener("keydown", focusInput);',
+        '  return () => window.removeEventListener("keydown", focusInput);',
+        "});",
+      ].join("\n"),
+    });
+    expect(result.code).toStartWith(
+      '"use strong";\nconst shortcutKey = "/";\nimport { useEffect, useRef } from "octane";\n',
+    );
+    expect(result.code).toContain(
+      "\tconst inputRef = useRef<HTMLInputElement | null>(null);\n\n\t// Preserve source comments",
+    );
+  });
+
   test("lets explicit compile options override source-level props", () => {
     const output = compileBeast("props { value }: { value: string }\np #{value}\n", {
       filename: "Value.btsx",
@@ -288,12 +339,16 @@ describe("BTSX to TSRX", () => {
 
     const misplacedSetup = getCompileError("p Hi\nsetup const value = 1;\n", "Setup.btsx");
     expect(misplacedSetup.diagnostic.code).toBe("BEAST1503_MISPLACED_DECLARATION");
+
+    const misplacedModule = getCompileError("p Hi\nmodule const value = 1;\n", "Module.btsx");
+    expect(misplacedModule.diagnostic.code).toBe("BEAST1503_MISPLACED_DECLARATION");
   });
 
   test.each([
     ["empty props", "props\n", "BEAST1502_EMPTY_PROPS"],
     ["empty import", "import\n", "BEAST1504_EMPTY_IMPORT"],
     ["empty setup", "setup\n", "BEAST1505_EMPTY_SETUP"],
+    ["empty module", "module\n", "BEAST1506_EMPTY_MODULE"],
   ])("reports invalid declaration syntax for %s", (_label, source, code) => {
     const error = getCompileError(source, "InvalidDeclaration.btsx");
     expect(error.diagnostic.code).toBe(code);

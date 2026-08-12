@@ -34,6 +34,11 @@ export interface ImportDeclaration extends BaseNode {
   code: string;
 }
 
+export interface ModuleDeclaration extends BaseNode {
+  kind: "module";
+  code: string;
+}
+
 export interface PropsDeclaration extends BaseNode {
   kind: "props";
   parameter: string;
@@ -44,7 +49,11 @@ export interface SetupDeclaration extends BaseNode {
   code: string;
 }
 
-export type BeastDeclaration = ImportDeclaration | PropsDeclaration | SetupDeclaration;
+export type BeastDeclaration =
+  | ImportDeclaration
+  | ModuleDeclaration
+  | PropsDeclaration
+  | SetupDeclaration;
 
 export interface ElementNode extends BaseNode {
   kind: "element";

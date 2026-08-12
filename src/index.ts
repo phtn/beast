@@ -9,6 +9,7 @@ export type {
   IfBranch,
   IfNode,
   ImportDeclaration,
+  ModuleDeclaration,
   PropsDeclaration,
   SetupDeclaration,
   SourcePosition,
