@@ -314,6 +314,30 @@ describe("BTSX to TSRX", () => {
     );
   });
 
+  test("passes controlled linked-state input through Octane without native-event warnings", () => {
+    const source = [
+      'module "use strong";',
+      'import { useLinkedState } from "octane";',
+      "props { user }: { user: { id: string; name: string } }",
+      "setup const [name, setName] = useLinkedState(user.id, () => user.name);",
+      'input(value={name} onInput={(event) => setName(event.currentTarget.value)})',
+    ].join("\n");
+    const code = compileBeast(source, { filename: "LinkedInput.btsx" });
+
+    expect(code).toContain(
+      "const [name, setName] = useLinkedState(user.id, () => user.name);",
+    );
+    expect(code).toContain(
+      "<input value={name} onInput={(event) => setName(event.currentTarget.value)} />",
+    );
+    const octane = compile(code, "LinkedInput.tsrx", {
+      mode: "client",
+      hmr: false,
+      dev: true,
+    });
+    expect(octane.diagnostics).toHaveLength(0);
+  });
+
   test("lets explicit compile options override source-level props", () => {
     const output = compileBeast("props { value }: { value: string }\np #{value}\n", {
       filename: "Value.btsx",

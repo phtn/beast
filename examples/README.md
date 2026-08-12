@@ -15,6 +15,7 @@ goldens are also included in the published `beast-tsrx` package.
 | [`card`](card/card.btsx) | Nested elements, interpolation, conditions, and a hoisted loop key |
 | [`catalog`](catalog/catalog.btsx) | Attributes, explicit loop keys, and an `empty` fallback |
 | [`counter`](counter/counter.btsx) | `useState`, inferred-dependency `useMemo` and `useEffect`, and state-driven events |
+| [`editor`](editor/editor.btsx) | Strong-mode `useLinkedState`, controlled text input, native `onInput`, and form submission |
 | [`fragment`](fragment/fragment.btsx) | Multiple roots, text-only lines, comments, escaping, and interpolation |
 | [`provider`](provider/provider.btsx) | A dotted Context provider component with nested output |
 | [`shortcut`](shortcut/shortcut.btsx) | Multiline module/setup source, Strong mode, `useRef`, and effect cleanup |

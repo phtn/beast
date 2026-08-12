@@ -1,0 +1,10 @@
+module "use strong";
+import { useLinkedState } from "octane";
+props { user, onSave }: { user: { id: string; name: string }; onSave: (name: string) => void }
+setup const [name, setName] = useLinkedState(user.id, () => user.name);
+
+form.profile-editor(onSubmit={(event) => { event.preventDefault(); onSave(name); }})
+  label(htmlFor="profile-name") Name
+  input#profile-name(name="name" value={name} onInput={(event) => setName(event.currentTarget.value)})
+  p.preview Preview: #{name.trim().length === 0 ? "Anonymous" : name}
+  button(type="submit" disabled={name.trim().length === 0}) Save profile

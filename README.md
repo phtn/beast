@@ -249,6 +249,22 @@ button(type="button" onClick={() => setCount(count + 1)}) Count: #{count}, doubl
 Dependency arguments are intentionally omitted in this example so Octane can
 infer them from each closure. See the complete [counter golden](examples/counter/counter.btsx).
 
+For editable state that follows a changing source, use Octane's
+`useLinkedState`. Text fields use the browser-native `onInput` event for each
+edit:
+
+```btsx
+module "use strong";
+import { useLinkedState } from "octane";
+props { user }: { user: { id: string; name: string } }
+setup const [name, setName] = useLinkedState(user.id, () => user.name);
+
+input(value={name} onInput={(event) => setName(event.currentTarget.value)})
+```
+
+This keeps local edits while `user.id` is unchanged and reconciles immediately
+when the source changes. See the complete [editor golden](examples/editor/editor.btsx).
+
 Indented source blocks end at the next nonblank line aligned with the
 declaration. Beast removes their common source indentation while preserving
 relative indentation, comments, and blank lines. It does not parse or rewrite
@@ -618,6 +634,7 @@ beast/
 │   ├── card/                    # Conditions and a hoisted loop key
 │   ├── catalog/                 # Attributes and an explicit loop key
 │   ├── counter/                 # Octane state, memo, and effect hooks
+│   ├── editor/                  # Linked controlled input and native events
 │   ├── fragment/                # Multiple roots, text, and escaping
 │   ├── provider/                # Dotted Context provider component
 │   ├── shortcut/                # Multiline source and effect cleanup
