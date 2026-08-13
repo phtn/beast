@@ -4,10 +4,10 @@ type DashboardProps = { reportId: string };
 const LazyAnalytics = lazy(() => import("./analytics.tsrx"));
 
 function ReviewSummary({ reportId }: DashboardProps) @{
-  <article class="review-summary">
-    <h3>{"Reviews for " + reportId}</h3>
-    <button type="button">Open reviews</button>
-  </article>
+	<article className="review-summary">
+		<h3>{"Reviews for " + reportId}</h3>
+		<button type="button">Open reviews</button>
+	</article>
 }
 
 export default function Deferred({ reportId }: DashboardProps) @{

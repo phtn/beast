@@ -257,7 +257,7 @@ describe("BTSX to TSRX", () => {
     expect(error.diagnostic.code).toBe(code);
   });
 
-  test("emits source-level module and component declarations", () => {
+  test("emits source-level imports, props, and setup declarations", () => {
     const result = compileBeastResult(
       [
         'import type { User } from "./types.ts";',
@@ -284,6 +284,39 @@ describe("BTSX to TSRX", () => {
       "props",
       "setup",
     ]);
+  });
+
+  test("emits tagless local component declarations", () => {
+    const source = [
+      "module interface GreetingProps { name: string }",
+      "component Greeting",
+      "  props { name }: GreetingProps",
+      '  setup const label = "Hello, " + name;',
+      "  strong #{label}",
+      "props { name }: GreetingProps",
+      "Greeting(name={name})",
+    ].join("\n");
+    const result = compileBeastResult(source, { filename: "Welcome.btsx" });
+
+    expect(source).not.toMatch(/<\/?[A-Za-z]/u);
+    expect(result.code).toContain(
+      "function Greeting({ name }: GreetingProps) @{\n\tconst label = \"Hello, \" + name;\n\n\t<strong>{label}</strong>\n}",
+    );
+    expect(result.code).toContain(
+      "export default function Welcome({ name }: GreetingProps) @{",
+    );
+    const component = result.ast.declarations.find(
+      (declaration) => declaration.kind === "component",
+    );
+    expect(component).toMatchObject({
+      kind: "component",
+      name: "Greeting",
+      props: { kind: "props", parameter: "{ name }: GreetingProps" },
+    });
+    if (component?.kind === "component") {
+      expect(component.setup).toHaveLength(1);
+      expect(component.children).toHaveLength(1);
+    }
   });
 
   test("preserves multiline module and setup source blocks", () => {
@@ -389,17 +422,15 @@ describe("BTSX to TSRX", () => {
     expect(octane.diagnostics).toHaveLength(0);
   });
 
-  test("compiles module-local context consumers and a dotted provider", () => {
+  test("compiles tagless local context consumers and a dotted provider", () => {
     const result = compileBeastResult(
       [
         'import { createContext, use, useContext } from "octane";',
-        "module",
-        '  const Theme = createContext("light");',
-        "  function ThemeReader() @{",
-        "    const direct = use(Theme);",
-        "    const explicit = useContext(Theme);",
-        '    <p>{direct + ":" + explicit}</p>',
-        "  }",
+        'module const Theme = createContext("light");',
+        "component ThemeReader",
+        "  setup const direct = use(Theme);",
+        "  setup const explicit = useContext(Theme);",
+        '  p #{direct + ":" + explicit}',
         "props { theme }: { theme: string }",
         "Theme.Provider(value={theme})",
         "  ThemeReader",
@@ -620,6 +651,12 @@ describe("BTSX to TSRX", () => {
 
     const misplacedModule = getCompileError("p Hi\nmodule const value = 1;\n", "Module.btsx");
     expect(misplacedModule.diagnostic.code).toBe("BEAST1503_MISPLACED_DECLARATION");
+
+    const misplacedComponent = getCompileError(
+      "p Hi\ncomponent Helper\n  p Nested\n",
+      "Component.btsx",
+    );
+    expect(misplacedComponent.diagnostic.code).toBe("BEAST1503_MISPLACED_DECLARATION");
   });
 
   test.each([
@@ -629,6 +666,25 @@ describe("BTSX to TSRX", () => {
     ["empty module", "module\n", "BEAST1506_EMPTY_MODULE"],
   ])("reports invalid declaration syntax for %s", (_label, source, code) => {
     const error = getCompileError(source, "InvalidDeclaration.btsx");
+    expect(error.diagnostic.code).toBe(code);
+    expect(error.diagnostic.span.start.line).toBe(1);
+  });
+
+  test.each([
+    ["missing name", "component\n  p Hi\n", "BEAST1801_INVALID_COMPONENT_NAME"],
+    [
+      "lowercase name",
+      "component helper\n  p Hi\n",
+      "BEAST1801_INVALID_COMPONENT_NAME",
+    ],
+    ["empty body", "component Helper\np Main\n", "BEAST1802_EMPTY_COMPONENT"],
+    [
+      "missing template",
+      "component Helper\n  setup const value = 1;\np Main\n",
+      "BEAST1803_EMPTY_COMPONENT_TEMPLATE",
+    ],
+  ])("reports invalid local component syntax for %s", (_label, source, code) => {
+    const error = getCompileError(source, "InvalidComponent.btsx");
     expect(error.diagnostic.code).toBe(code);
     expect(error.diagnostic.span.start.line).toBe(1);
   });

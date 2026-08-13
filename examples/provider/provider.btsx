@@ -1,18 +1,21 @@
 import { createContext, use, useContext } from "octane";
 module
   type ThemeName = "light" | "dark";
+  interface ProviderProps {
+    theme: ThemeName;
+    children: unknown;
+  }
+
   const Theme = createContext<ThemeName>("light");
 
-  function ThemeLabel() @{
-    const theme = use(Theme);
-    <p class="theme-label">{"Current theme: " + theme}</p>
-  }
+component ThemeLabel
+  setup const theme = use(Theme);
+  p.theme-label #{"Current theme: " + theme}
 
-  function ThemeSwatch() @{
-    const theme = useContext(Theme);
-    <span aria-label={"Theme swatch: " + theme} data-theme={theme} />
-  }
-props { theme, children }: { theme: ThemeName; children: unknown }
+component ThemeSwatch
+  setup const theme = useContext(Theme);
+  span(aria-label={"Theme swatch: " + theme} data-theme={theme})
+props { theme, children }: ProviderProps
 
 Theme.Provider(value={theme})
   section.theme-shell(data-theme={theme})

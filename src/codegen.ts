@@ -2,10 +2,12 @@ import type {
   Attr,
   BeastDocument,
   BeastNode,
+  ComponentDeclaration,
   EachNode,
   ElementNode,
   IfNode,
   SwitchNode,
+  SetupDeclaration,
   TextSpan,
   TryNode,
 } from "./ast.js";
@@ -32,6 +34,9 @@ export function generateTsrx(document: BeastDocument, options: GenerateOptions):
   const sourceProps = document.declarations.find((declaration) => declaration.kind === "props");
   const parameter = (options.propsParam ?? sourceProps?.parameter ?? "").trim();
   const setup = document.declarations.filter((declaration) => declaration.kind === "setup");
+  const localComponents = document.declarations.filter(
+    (declaration): declaration is ComponentDeclaration => declaration.kind === "component",
+  );
   const lines: string[] = [];
   for (const declaration of document.declarations) {
     if (declaration.kind === "import" || declaration.kind === "module") {
@@ -39,7 +44,43 @@ export function generateTsrx(document: BeastDocument, options: GenerateOptions):
     }
   }
   if (lines.length > 0) lines.push("");
-  lines.push(...generateComponentOpening(options.componentName, parameter));
+
+  for (const component of localComponents) {
+    lines.push(
+      ...generateComponent(
+        component.name,
+        component.props?.parameter ?? "",
+        component.setup,
+        component.children,
+        false,
+        document,
+      ),
+    );
+    lines.push("");
+  }
+
+  lines.push(
+    ...generateComponent(
+      options.componentName,
+      parameter,
+      setup,
+      document.children,
+      true,
+      document,
+    ),
+  );
+  return `${lines.join("\n")}\n`;
+}
+
+function generateComponent(
+  componentName: string,
+  parameter: string,
+  setup: readonly SetupDeclaration[],
+  children: readonly BeastNode[],
+  exportDefault: boolean,
+  document: BeastDocument,
+): string[] {
+  const lines = generateComponentOpening(componentName, parameter, exportDefault);
   if (setup.length > 0) {
     for (const declaration of setup) {
       for (const codeLine of declaration.code.split("\n")) {
@@ -49,17 +90,17 @@ export function generateTsrx(document: BeastDocument, options: GenerateOptions):
     lines.push("");
   }
   const rootNeedsFragment =
-    document.children.length !== 1 || document.children[0]?.kind === "text";
+    children.length !== 1 || children[0]?.kind === "text";
   if (rootNeedsFragment) {
     lines.push(`${indent(1)}<>`);
-    for (const child of document.children) lines.push(...generateNode(child, 2, document));
+    for (const child of children) lines.push(...generateNode(child, 2, document));
     lines.push(`${indent(1)}</>`);
   } else {
-    const child = document.children[0];
+    const child = children[0];
     if (child !== undefined) lines.push(...generateNode(child, 1, document));
   }
   lines.push("}");
-  return `${lines.join("\n")}\n`;
+  return lines;
 }
 
 function generateNode(node: BeastNode, depth: number, document: BeastDocument): string[] {
@@ -271,8 +312,12 @@ function indent(depth: number): string {
   return "\t".repeat(depth);
 }
 
-function generateComponentOpening(componentName: string, parameter: string): string[] {
-  const prefix = `export default function ${componentName}(`;
+function generateComponentOpening(
+  componentName: string,
+  parameter: string,
+  exportDefault: boolean,
+): string[] {
+  const prefix = `${exportDefault ? "export default " : ""}function ${componentName}(`;
   const inline = `${prefix}${parameter}) @{`;
   if (inline.length <= PRINT_WIDTH) return [inline];
 

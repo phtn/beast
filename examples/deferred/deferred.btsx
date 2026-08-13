@@ -4,12 +4,11 @@ module
   type DashboardProps = { reportId: string };
   const LazyAnalytics = lazy(() => import("./analytics.tsrx"));
 
-  function ReviewSummary({ reportId }: DashboardProps) @{
-    <article class="review-summary">
-      <h3>{"Reviews for " + reportId}</h3>
-      <button type="button">Open reviews</button>
-    </article>
-  }
+component ReviewSummary
+  props { reportId }: DashboardProps
+  article.review-summary
+    h3 #{"Reviews for " + reportId}
+    button(type="button") Open reviews
 props { reportId }: DashboardProps
 
 ErrorBoundary(fallback="The dashboard could not be loaded.")

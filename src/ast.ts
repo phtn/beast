@@ -49,9 +49,18 @@ export interface SetupDeclaration extends BaseNode {
   code: string;
 }
 
+export interface ComponentDeclaration extends BaseNode {
+  kind: "component";
+  name: string;
+  props: PropsDeclaration | null;
+  setup: SetupDeclaration[];
+  children: BeastNode[];
+}
+
 export type BeastDeclaration =
   | ImportDeclaration
   | ModuleDeclaration
+  | ComponentDeclaration
   | PropsDeclaration
   | SetupDeclaration;
 

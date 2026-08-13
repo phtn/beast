@@ -1,19 +1,17 @@
 import { requestFormReset, useActionState, useFormStatus, useOptimistic, useRef } from "octane";
-function SubmitButton() @{
-  const { pending, data, method } = useFormStatus();
-  const pendingName = String(data?.get("name") ?? "");
-  <button type="submit" disabled={pending} data-method={method}>
-    {pending ? "Saving " + pendingName + "…" : "Save name"}
-  </button>
+interface EditNameProps {
+  names: readonly string[];
+  saveName: (name: string) => Promise<void>;
 }
 
-export default function Actions({
-	names,
-	saveName,
-}: {
-	names: readonly string[];
-	saveName: (name: string) => Promise<void>;
-}) @{
+function SubmitButton() @{
+	const { pending, data, method } = useFormStatus();
+	const pendingName = String(data?.get("name") ?? "");
+
+	<button type="submit" disabled={pending} data-method={method}>{pending ? "Saving " + pendingName + "…" : "Save name"}</button>
+}
+
+export default function Actions({ names, saveName }: EditNameProps) @{
 	const formRef = useRef<HTMLFormElement | null>(null);
 	const [optimisticNames, addOptimisticName] = useOptimistic(
 	  names,

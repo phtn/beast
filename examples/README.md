@@ -10,7 +10,7 @@ goldens are also included in the published `beast-tsrx` package.
 
 | Example | Demonstrates |
 | --- | --- |
-| [`actions`](actions/actions.btsx) | Form action state, descendant status, optimistic output, and deferred reset |
+| [`actions`](actions/actions.btsx) | A tagless local submit component, form action state, descendant status, optimistic output, and deferred reset |
 | [`app`](app/app.btsx) | Source imports, typed props, component composition, IDs, and dynamic classes |
 | [`boundary`](boundary/boundary.btsx) | Async `try`, `pending`, and bound `catch` output |
 | [`card`](card/card.btsx) | Nested elements, interpolation, conditions, and a hoisted loop key |
@@ -20,7 +20,7 @@ goldens are also included in the published `beast-tsrx` package.
 | [`editor`](editor/editor.btsx) | Strong-mode `useLinkedState`, controlled text input, native `onInput`, and form submission |
 | [`fragment`](fragment/fragment.btsx) | Multiple roots, text-only lines, comments, escaping, and interpolation |
 | [`network`](network/network.btsx) | Stable browser subscription and deterministic SSR with `useSyncExternalStore` |
-| [`provider`](provider/provider.btsx) | Module-scoped Context, dotted provider, and `use()`/`useContext()` consumers |
+| [`provider`](provider/provider.btsx) | Tagless local components, module-scoped Context, dotted provider, and `use()`/`useContext()` consumers |
 | [`refs`](refs/refs.btsx) | An object ref plus callback ref array and callback cleanup |
 | [`responsive`](responsive/responsive.btsx) | Non-urgent tab updates with `useTransition` and immediate search with `useDeferredValue` |
 | [`shortcut`](shortcut/shortcut.btsx) | Multiline module/setup source, Strong mode, `useRef`, and effect cleanup |

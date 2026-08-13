@@ -1,12 +1,14 @@
 import { useDeferredValue, useState, useTransition } from "octane";
 type Tab = "overview" | "activity";
+interface SearchResultsProps { query: string }
+interface TabPanelProps { tab: Tab }
 
-function SearchResults({ query }: { query: string }) @{
-  <p>{"Showing results for " + (query || "all products")}</p>
+function SearchResults({ query }: SearchResultsProps) @{
+	<p>{"Showing results for " + (query || "all products")}</p>
 }
 
-function TabPanel({ tab }: { tab: Tab }) @{
-  <p>{tab === "overview" ? "Overview is ready." : "Activity is ready."}</p>
+function TabPanel({ tab }: TabPanelProps) @{
+	<p>{tab === "overview" ? "Overview is ready." : "Activity is ready."}</p>
 }
 
 export default function Responsive() @{

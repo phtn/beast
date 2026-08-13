@@ -197,12 +197,12 @@ capitalized tag are preserved as a dotted component API, so `Theme.Provider`
 emits `<Theme.Provider>`. A lowercase dotted suffix remains class shorthand:
 `Card.featured` emits `<Card className="featured">`.
 
-### Module code, imports, props, and setup
+### Module code, imports, local components, props, and setup
 
-Top-level `module`, `import`, `props`, and `setup` declarations make a component
-self-contained. They must appear before the first template node. Imports and
-props occupy one physical line; module and setup source can be inline or use an
-indented block.
+Top-level `module`, `import`, `component`, `props`, and `setup` declarations
+make a component self-contained. They must appear before the first template
+node. Imports and props occupy one physical line; module and setup source can
+be inline or use an indented block.
 
 ```btsx
 import UserCard from "./UserCard.btsx";
@@ -231,17 +231,21 @@ module
 import { useEffect, useRef } from "octane";
 ```
 
-Module blocks may also contain local TSRX component declarations. This makes a
-module-scoped Context and its consumers self-contained:
+The `component` declaration defines a local component using the same tagless
+BTSX syntax as the default component. Its optional `props` and `setup`
+declarations must precede its template. This keeps module-scoped Context and
+its consumers self-contained without embedding TSRX tags in BTSX:
 
 ```btsx
 import { createContext, use } from "octane";
 module
+  interface ThemeProviderProps { theme: string }
   const Theme = createContext("light");
-  function ThemeLabel() @{
-    const theme = use(Theme);
-    <p>{"Current theme: " + theme}</p>
-  }
+
+component ThemeLabel
+  setup const currentTheme = use(Theme);
+  p #{"Current theme: " + currentTheme}
+props { theme }: ThemeProviderProps
 
 Theme.Provider(value={theme})
   ThemeLabel
@@ -361,10 +365,15 @@ form:
 ```btsx
 import { requestFormReset, useActionState, useFormStatus, useOptimistic, useRef } from "octane";
 module
-  function SubmitButton() @{
-    const { pending } = useFormStatus();
-    <button type="submit" disabled={pending}>{pending ? "Saving…" : "Save"}</button>
+  interface EditNameProps {
+    names: readonly string[];
+    saveName: (name: string) => Promise<void>;
   }
+
+component SubmitButton
+  setup const { pending } = useFormStatus();
+  button(type="submit" disabled={pending}) #{pending ? "Saving…" : "Save"}
+props { names, saveName }: EditNameProps
 setup
   const formRef = useRef<HTMLFormElement | null>(null);
   const [optimisticNames, addOptimisticName] = useOptimistic(names, (current, name: string) => [...current, name]);

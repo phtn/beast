@@ -4,6 +4,7 @@ export type {
   BeastDeclaration,
   BeastDocument,
   BeastNode,
+  ComponentDeclaration,
   EachNode,
   ElementNode,
   IfBranch,

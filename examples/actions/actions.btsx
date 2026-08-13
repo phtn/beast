@@ -1,13 +1,16 @@
 import { requestFormReset, useActionState, useFormStatus, useOptimistic, useRef } from "octane";
 module
-  function SubmitButton() @{
+  interface EditNameProps {
+    names: readonly string[];
+    saveName: (name: string) => Promise<void>;
+  }
+
+component SubmitButton
+  setup
     const { pending, data, method } = useFormStatus();
     const pendingName = String(data?.get("name") ?? "");
-    <button type="submit" disabled={pending} data-method={method}>
-      {pending ? "Saving " + pendingName + "…" : "Save name"}
-    </button>
-  }
-props { names, saveName }: { names: readonly string[]; saveName: (name: string) => Promise<void> }
+  button(type="submit" disabled={pending} data-method={method}) #{pending ? "Saving " + pendingName + "…" : "Save name"}
+props { names, saveName }: EditNameProps
 setup
   const formRef = useRef<HTMLFormElement | null>(null);
   const [optimisticNames, addOptimisticName] = useOptimistic(

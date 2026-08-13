@@ -19,7 +19,7 @@ through `import`, `setup`, attributes, and nesting unchanged.
 
 | Octane area | Beast coverage | Proof |
 | --- | --- | --- |
-| Components, typed props, children | Native elements, component references, source imports and typed props | `app`, `provider` goldens |
+| Components, typed props, children | Native elements, component references, source imports, typed props, and tagless local component declarations | `app`, `provider` goldens |
 | Setup and hooks | Inline TypeScript setup; `useState`, `useMemo`, and `useEffect` compile through Octane | `counter` golden |
 | Module/setup source | Inline and multiline raw TypeScript, module directives, comments, blank lines, refs, and effect cleanup | `shortcut` golden |
 | Refs | Object refs, callback refs with cleanup, and arrays of refs pass through as ordinary props | `refs`, `shortcut` goldens |

@@ -3,10 +3,13 @@ import type {
   BeastDeclaration,
   BeastDocument,
   BeastNode,
+  ComponentDeclaration,
   EachNode,
   ElementNode,
   IfBranch,
   IfNode,
+  PropsDeclaration,
+  SetupDeclaration,
   SourceSpan,
   SwitchBranch,
   SwitchNode,
@@ -25,6 +28,7 @@ interface LogicalLine {
 }
 
 const IDENTIFIER = /^[A-Za-z_$][A-Za-z0-9_$]*$/u;
+const COMPONENT_IDENTIFIER = /^[A-Z_$][A-Za-z0-9_$]*$/u;
 
 export function parse(source: string, filename = "<input>"): BeastDocument {
   const normalized = source.replace(/\r\n?/gu, "\n");
@@ -103,6 +107,11 @@ class Parser {
         continue;
       }
 
+      if (isComponentDeclaration(line.content)) {
+        declarations.push(this.parseComponentDeclaration(line));
+        continue;
+      }
+
       if (isPropsDeclaration(line.content)) {
         if (sawProps) {
           this.fail(
@@ -111,44 +120,13 @@ class Parser {
             line,
           );
         }
-        const rawParameter = line.content.slice("props".length).trim();
-        const parameter = rawParameter.endsWith(";")
-          ? rawParameter.slice(0, -1).trimEnd()
-          : rawParameter;
-        if (parameter.length === 0) {
-          this.fail(
-            "BEAST1502_EMPTY_PROPS",
-            "A props declaration requires a typed function parameter.",
-            line,
-          );
-        }
-        declarations.push({
-          kind: "props",
-          parameter,
-          lineNo: line.lineNo,
-          span: lineSpan(line),
-        });
+        declarations.push(this.parsePropsDeclaration(line));
         sawProps = true;
-        this.index += 1;
         continue;
       }
 
       if (isSetupDeclaration(line.content)) {
-        const code =
-          line.content === "setup"
-            ? this.parseSourceBlock(
-                line,
-                "BEAST1505_EMPTY_SETUP",
-                "A setup block requires indented TypeScript source.",
-              )
-            : line.content.slice("setup".length).trim();
-        declarations.push({
-          kind: "setup",
-          code,
-          lineNo: line.lineNo,
-          span: lineSpan(line),
-        });
-        if (line.content !== "setup") this.index += 1;
+        declarations.push(this.parseSetupDeclaration(line));
         continue;
       }
 
@@ -175,6 +153,117 @@ class Parser {
     }
 
     return declarations;
+  }
+
+  private parseComponentDeclaration(line: LogicalLine): ComponentDeclaration {
+    const name = line.content.slice("component".length).trim();
+    if (!COMPONENT_IDENTIFIER.test(name)) {
+      this.fail(
+        "BEAST1801_INVALID_COMPONENT_NAME",
+        "A local component requires a single PascalCase TypeScript identifier.",
+        line,
+      );
+    }
+
+    this.index += 1;
+    const firstBodyLine = this.lines[this.index];
+    if (firstBodyLine === undefined || firstBodyLine.indent <= line.indent) {
+      this.fail(
+        "BEAST1802_EMPTY_COMPONENT",
+        "A local component requires an indented body.",
+        line,
+      );
+    }
+
+    const bodyIndent = firstBodyLine.indent;
+    let props: PropsDeclaration | null = null;
+    const setup: SetupDeclaration[] = [];
+
+    while (this.index < this.lines.length) {
+      const declarationLine = this.lines[this.index];
+      if (declarationLine === undefined || declarationLine.indent !== bodyIndent) break;
+
+      if (isPropsDeclaration(declarationLine.content)) {
+        if (props !== null) {
+          this.fail(
+            "BEAST1501_DUPLICATE_PROPS",
+            "A component can only declare props once.",
+            declarationLine,
+          );
+        }
+        props = this.parsePropsDeclaration(declarationLine);
+        continue;
+      }
+
+      if (isSetupDeclaration(declarationLine.content)) {
+        setup.push(this.parseSetupDeclaration(declarationLine));
+        continue;
+      }
+
+      break;
+    }
+
+    const nextLine = this.lines[this.index];
+    const children =
+      nextLine !== undefined && nextLine.indent > line.indent
+        ? this.parseBlock(bodyIndent)
+        : [];
+    if (children.length === 0) {
+      this.fail(
+        "BEAST1803_EMPTY_COMPONENT_TEMPLATE",
+        "A local component requires at least one template node after its declarations.",
+        line,
+      );
+    }
+
+    return {
+      kind: "component",
+      name,
+      props,
+      setup,
+      children,
+      lineNo: line.lineNo,
+      span: lineSpan(line),
+    };
+  }
+
+  private parsePropsDeclaration(line: LogicalLine): PropsDeclaration {
+    const rawParameter = line.content.slice("props".length).trim();
+    const parameter = rawParameter.endsWith(";")
+      ? rawParameter.slice(0, -1).trimEnd()
+      : rawParameter;
+    if (parameter.length === 0) {
+      this.fail(
+        "BEAST1502_EMPTY_PROPS",
+        "A props declaration requires a typed function parameter.",
+        line,
+      );
+    }
+    this.index += 1;
+    return {
+      kind: "props",
+      parameter,
+      lineNo: line.lineNo,
+      span: lineSpan(line),
+    };
+  }
+
+  private parseSetupDeclaration(line: LogicalLine): SetupDeclaration {
+    const code =
+      line.content === "setup"
+        ? this.parseSourceBlock(
+            line,
+            "BEAST1505_EMPTY_SETUP",
+            "A setup block requires indented TypeScript source.",
+          )
+        : line.content.slice("setup".length).trim();
+    if (line.content !== "setup") this.index += 1;
+    return {
+      kind: "setup",
+      code,
+      lineNo: line.lineNo,
+      span: lineSpan(line),
+    };
   }
 
   private parseSourceBlock(line: LogicalLine, code: string, message: string): string {
@@ -235,12 +324,13 @@ class Parser {
     if (
       isImportDeclaration(line.content) ||
       isModuleDeclaration(line.content) ||
+      isComponentDeclaration(line.content) ||
       isPropsDeclaration(line.content) ||
       isSetupDeclaration(line.content)
     ) {
       this.fail(
         "BEAST1503_MISPLACED_DECLARATION",
-        "Module code, imports, props, and setup statements must be declared before template content.",
+        "Module code, imports, local components, props, and setup statements must be declared before template content.",
         line,
       );
     }
@@ -707,6 +797,10 @@ function isImportDeclaration(content: string): boolean {
 
 function isModuleDeclaration(content: string): boolean {
   return content === "module" || /^module\s/u.test(content);
+}
+
+function isComponentDeclaration(content: string): boolean {
+  return content === "component" || /^component\s/u.test(content);
 }
 
 function isPropsDeclaration(content: string): boolean {

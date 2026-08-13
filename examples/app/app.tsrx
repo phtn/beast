@@ -1,26 +1,8 @@
 import Card from "../card/card.btsx";
 import Status from "../status/status.btsx";
+import { AppProps } from "./types";
 
-export default function App({
-	title,
-	themeClass,
-	user,
-	unreadCount,
-	messages,
-	groups,
-}: {
-	title: string;
-	themeClass: string;
-	user: { name: string; id: string; isAdmin: boolean };
-	unreadCount: number;
-	messages: { id: string; text: string }[];
-	groups: {
-		id: string;
-		title: string;
-		status: string;
-		items: { label: string; value: string }[];
-	}[];
-}) @{
+export default function App({ title, themeClass, user, unreadCount, messages, groups }: AppProps) @{
 	<main id="app" className={[themeClass, "shell"].filter(Boolean).join(" ")}>
 		<header className="hero">
 			<p className="eyebrow">Beast composition example</p>
