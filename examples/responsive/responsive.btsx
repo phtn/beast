@@ -1,0 +1,28 @@
+import { useDeferredValue, useState, useTransition } from "octane";
+module
+  type Tab = "overview" | "activity";
+
+  function SearchResults({ query }: { query: string }) @{
+    <p>{"Showing results for " + (query || "all products")}</p>
+  }
+
+  function TabPanel({ tab }: { tab: Tab }) @{
+    <p>{tab === "overview" ? "Overview is ready." : "Activity is ready."}</p>
+  }
+setup const [tab, setTab] = useState<Tab>("overview");
+setup const [isPending, startTransition] = useTransition();
+setup const [query, setQuery] = useState("");
+setup const deferredQuery = useDeferredValue(query);
+setup const isStale = query !== deferredQuery;
+
+section.project-dashboard
+  h2 Project dashboard
+  nav(aria-label="Project sections")
+    button(type="button" aria-current={tab === "overview" ? "page" : undefined} onClick={() => startTransition(() => setTab("overview"))}) Overview
+    button(type="button" aria-current={tab === "activity" ? "page" : undefined} onClick={() => startTransition(() => setTab("activity"))}) #{isPending ? "Opening…" : "Activity"}
+  TabPanel(tab={tab})
+  label
+    | Search products
+    input(value={query} onInput={(event) => setQuery(event.currentTarget.value)})
+  .results(aria-busy={isStale})
+    SearchResults(query={deferredQuery})

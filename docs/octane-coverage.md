@@ -26,6 +26,7 @@ through `import`, `setup`, attributes, and nesting unchanged.
 | Native events and attributes | Expression, string, boolean, ARIA, data, class, ID, native `onInput`, and form events | `catalog`, `counter`, `editor` goldens |
 | Linked controlled state | Strong-mode `useLinkedState` reconciles editable state by source identity | `editor` golden |
 | External stores | Stable subscription/client snapshot functions and a deterministic server snapshot pass through `useSyncExternalStore` | `network` golden and SSR assertion |
+| Responsive updates | `useTransition` marks tab changes as non-urgent while `useDeferredValue` lets search results lag behind controlled input | `responsive` golden and SSR assertion |
 | Conditions | `if`, `elseif`, and `else` emit native `@if` arms | `card`, `status` goldens |
 | Keyed lists | Item/index bindings, explicit keys, and single-root key hoisting emit `@for` | `card`, `catalog`, `status` goldens |
 | Empty lists | An aligned `empty` branch emits native `@empty` | `catalog` golden |
@@ -46,7 +47,7 @@ do not yet have a focused Beast example or integration test.
 
 These do not generally need new BTSX grammar:
 
-- Transitions/actions, deferred values, view transitions, and portals.
+- Actions/forms, view transitions, and portals.
 
 Keep examples focused: one golden per distinct compiler shape, with Octane
 runtime tests only where compilation cannot prove the behavior.
@@ -77,7 +78,7 @@ non-Vite development workflow.
 
 The smallest dependency-aware sequence is:
 
-1. Transitions/actions, deferred values, view transitions, and portals.
+1. Actions/forms, view transitions, and portals.
 2. Spread attributes, explicit fragments, and style blocks.
 3. Vite SSR/hydration integration fixtures, including compiler-split Hydrate.
 4. Rspack/Rsbuild support, source maps, and standalone watch mode.

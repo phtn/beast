@@ -333,6 +333,26 @@ browser connectivity events and cleans them up. Its conformance test also
 executes the server-compiled component, proving SSR uses `getServerSnapshot`
 without reading browser globals.
 
+Responsive updates use normal setup hooks as well. Keep controlled input state
+urgent, pass a deferred copy to slower output, and reserve transitions for
+updates where the current screen remains useful:
+
+```btsx
+import { useDeferredValue, useState, useTransition } from "octane";
+setup const [tab, setTab] = useState("overview");
+setup const [isPending, startTransition] = useTransition();
+setup const [query, setQuery] = useState("");
+setup const deferredQuery = useDeferredValue(query);
+
+button(onClick={() => startTransition(() => setTab("activity"))}) #{isPending ? "Opening…" : "Activity"}
+input(value={query} onInput={(event) => setQuery(event.currentTarget.value)})
+SearchResults(query={deferredQuery})
+```
+
+`useDeferredValue` is not a debounce; it controls which render may lag rather
+than imposing a fixed delay. See the complete
+[responsive golden](examples/responsive/responsive.btsx).
+
 ### Attributes
 
 Attributes live in parentheses and may be separated by spaces or commas:
@@ -724,6 +744,7 @@ beast/
 │   ├── network/                 # External-store subscription and SSR snapshot
 │   ├── provider/                # Context provider and consumer hooks
 │   ├── refs/                    # Callback, object, and array refs
+│   ├── responsive/              # Transitions and deferred search output
 │   ├── shortcut/                # Multiline source and effect cleanup
 │   ├── status/                  # Nested loops and branch chains
 │   └── variant/                 # Multi-way switch output

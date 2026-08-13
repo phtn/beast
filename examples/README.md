@@ -21,6 +21,7 @@ goldens are also included in the published `beast-tsrx` package.
 | [`network`](network/network.btsx) | Stable browser subscription and deterministic SSR with `useSyncExternalStore` |
 | [`provider`](provider/provider.btsx) | Module-scoped Context, dotted provider, and `use()`/`useContext()` consumers |
 | [`refs`](refs/refs.btsx) | An object ref plus callback ref array and callback cleanup |
+| [`responsive`](responsive/responsive.btsx) | Non-urgent tab updates with `useTransition` and immediate search with `useDeferredValue` |
 | [`shortcut`](shortcut/shortcut.btsx) | Multiline module/setup source, Strong mode, `useRef`, and effect cleanup |
 | [`status`](status/status.btsx) | Nested loops plus `elseif` and `else` branches |
 | [`variant`](variant/variant.btsx) | Multi-way `switch`, `case`, and `default` output |

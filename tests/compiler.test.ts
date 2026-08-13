@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { readdir, readFile } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import { compile } from "octane/compiler";
 import { renderToString } from "octane/server";
 import {
@@ -493,6 +495,60 @@ describe("BTSX to TSRX", () => {
     expect(renderToString(compiled.default).html).toContain(
       '<p class="network-status" role="status" aria-live="polite">Online</p>',
     );
+  });
+
+  test("compiles and server-renders transition and deferred-value hooks", async () => {
+    const filename = resolve("examples/responsive/responsive.btsx");
+    const source = await readFile(filename, "utf8");
+    const result = compileBeastResult(source, { filename });
+
+    expect(result.code).toContain(
+      'const [tab, setTab] = useState<Tab>("overview");',
+    );
+    expect(result.code).toContain(
+      "const [isPending, startTransition] = useTransition();",
+    );
+    expect(result.code).toContain("const deferredQuery = useDeferredValue(query);");
+
+    const tsrxFilename = filename.replace(/\.btsx$/u, ".tsrx");
+    const client = compile(result.code, tsrxFilename, {
+      mode: "client",
+      hmr: false,
+      dev: true,
+    });
+    expect(client.diagnostics).toHaveLength(0);
+    expect(client.code).toContain('useState("overview", 0)');
+    expect(client.code).toContain("useTransition(1)");
+    expect(client.code).toContain('useState("", 2)');
+    expect(client.code).toContain("useDeferredValue(query, 3)");
+
+    const server = compile(result.code, tsrxFilename, {
+      mode: "server",
+      hmr: false,
+      dev: true,
+    });
+    expect(server.diagnostics).toHaveLength(0);
+    const executable = server.code.replace(
+      "'octane/server'",
+      JSON.stringify(import.meta.resolve("octane/server")),
+    );
+    expect(executable).not.toBe(server.code);
+    const temporaryDirectory = await mkdtemp(resolve(tmpdir(), "beast-responsive-test-"));
+    const modulePath = resolve(temporaryDirectory, "responsive.mjs");
+    let rendered: string;
+    try {
+      await writeFile(modulePath, executable, "utf8");
+      const compiled = (await import(pathToFileURL(modulePath).href)) as {
+        default: Parameters<typeof renderToString>[0];
+      };
+      rendered = renderToString(compiled.default).html;
+    } finally {
+      await rm(temporaryDirectory, { recursive: true, force: true });
+    }
+
+    expect(rendered).toContain(">Activity</button>");
+    expect(rendered).toContain("<p>Overview is ready.</p>");
+    expect(rendered).toContain("<p>Showing results for all products</p>");
   });
 
   test("lets explicit compile options override source-level props", () => {
