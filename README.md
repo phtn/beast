@@ -76,11 +76,6 @@ The generated project includes:
 - Development, production build, preview, type-check, and combined check scripts
 - A focused `.gitignore` and an optional initialized Git repository
 
-> [!IMPORTANT]
-> The workspace packages are publish-ready but are not yet available from the
-> public npm registry. The creation commands above become live after
-> `beast-tsrx` and `create-beast` are published.
-
 Creator options:
 
 | Option | Effect |

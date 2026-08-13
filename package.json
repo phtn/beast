@@ -19,7 +19,7 @@
     }
   },
   "bin": {
-    "beast": "./dist/cli.js"
+    "beast": "dist/cli.js"
   },
   "files": [
     "dist",
