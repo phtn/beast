@@ -27,6 +27,7 @@ through `import`, `setup`, attributes, and nesting unchanged.
 | Linked controlled state | Strong-mode `useLinkedState` reconciles editable state by source identity | `editor` golden |
 | External stores | Stable subscription/client snapshot functions and a deterministic server snapshot pass through `useSyncExternalStore` | `network` golden and SSR assertion |
 | Responsive updates | `useTransition` marks tab changes as non-urgent while `useDeferredValue` lets search results lag behind controlled input | `responsive` golden and SSR assertion |
+| Actions and forms | `useActionState` owns submission state, `useFormStatus` reads it below the form, `useOptimistic` stages a row, and `requestFormReset` resets after success | `actions` golden and SSR assertion |
 | Conditions | `if`, `elseif`, and `else` emit native `@if` arms | `card`, `status` goldens |
 | Keyed lists | Item/index bindings, explicit keys, and single-root key hoisting emit `@for` | `card`, `catalog`, `status` goldens |
 | Empty lists | An aligned `empty` branch emits native `@empty` | `catalog` golden |
@@ -47,7 +48,7 @@ do not yet have a focused Beast example or integration test.
 
 These do not generally need new BTSX grammar:
 
-- Actions/forms, view transitions, and portals.
+- View transitions and portals.
 
 Keep examples focused: one golden per distinct compiler shape, with Octane
 runtime tests only where compilation cannot prove the behavior.
@@ -78,7 +79,7 @@ non-Vite development workflow.
 
 The smallest dependency-aware sequence is:
 
-1. Actions/forms, view transitions, and portals.
+1. View transitions and portals.
 2. Spread attributes, explicit fragments, and style blocks.
 3. Vite SSR/hydration integration fixtures, including compiler-split Hydrate.
 4. Rspack/Rsbuild support, source maps, and standalone watch mode.

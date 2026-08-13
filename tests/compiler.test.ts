@@ -22,6 +22,26 @@ function getCompileError(source: string, filename = "Invalid.btsx"): BeastCompil
   throw new Error("Expected Beast compilation to fail.");
 }
 
+async function renderCompiledServer(code: string, props?: unknown): Promise<string> {
+  const executable = code.replace(
+    "'octane/server'",
+    JSON.stringify(import.meta.resolve("octane/server")),
+  );
+  if (executable === code) throw new Error("Expected an Octane server runtime import.");
+
+  const temporaryDirectory = await mkdtemp(resolve(tmpdir(), "beast-server-test-"));
+  const modulePath = resolve(temporaryDirectory, "component.mjs");
+  try {
+    await writeFile(modulePath, executable, "utf8");
+    const compiled = (await import(pathToFileURL(modulePath).href)) as {
+      default: Parameters<typeof renderToString>[0];
+    };
+    return renderToString(compiled.default, props).html;
+  } finally {
+    await rm(temporaryDirectory, { recursive: true, force: true });
+  }
+}
+
 const GOLDEN_FIXTURES = (await readdir(resolve("examples"), { withFileTypes: true }))
   .filter((entry) => entry.isDirectory())
   .map((entry) => entry.name)
@@ -483,16 +503,7 @@ describe("BTSX to TSRX", () => {
       "useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot, 0)",
     );
 
-    const executable = server.code.replace(
-      "'octane/server'",
-      JSON.stringify(import.meta.resolve("octane/server")),
-    );
-    expect(executable).not.toBe(server.code);
-    const compiled = (await import(
-      `data:text/javascript;base64,${Buffer.from(executable).toString("base64")}`
-    )) as { default: Parameters<typeof renderToString>[0] };
-
-    expect(renderToString(compiled.default).html).toContain(
+    expect(await renderCompiledServer(server.code)).toContain(
       '<p class="network-status" role="status" aria-live="polite">Online</p>',
     );
   });
@@ -528,27 +539,57 @@ describe("BTSX to TSRX", () => {
       dev: true,
     });
     expect(server.diagnostics).toHaveLength(0);
-    const executable = server.code.replace(
-      "'octane/server'",
-      JSON.stringify(import.meta.resolve("octane/server")),
-    );
-    expect(executable).not.toBe(server.code);
-    const temporaryDirectory = await mkdtemp(resolve(tmpdir(), "beast-responsive-test-"));
-    const modulePath = resolve(temporaryDirectory, "responsive.mjs");
-    let rendered: string;
-    try {
-      await writeFile(modulePath, executable, "utf8");
-      const compiled = (await import(pathToFileURL(modulePath).href)) as {
-        default: Parameters<typeof renderToString>[0];
-      };
-      rendered = renderToString(compiled.default).html;
-    } finally {
-      await rm(temporaryDirectory, { recursive: true, force: true });
-    }
+    const rendered = await renderCompiledServer(server.code);
 
     expect(rendered).toContain(">Activity</button>");
     expect(rendered).toContain("<p>Overview is ready.</p>");
     expect(rendered).toContain("<p>Showing results for all products</p>");
+  });
+
+  test("compiles and server-renders action and form hooks", async () => {
+    const filename = resolve("examples/actions/actions.btsx");
+    const source = await readFile(filename, "utf8");
+    const result = compileBeastResult(source, { filename });
+
+    expect(result.code).toContain("const { pending, data, method } = useFormStatus();");
+    expect(result.code).toContain("const [optimisticNames, addOptimisticName]");
+    expect(result.code).toContain("const [message, submit, isPending] = useActionState(");
+    expect(result.code).toContain("requestFormReset(formRef.current)");
+    expect(result.code).toContain('<form ref={formRef} action={submit}>');
+
+    const tsrxFilename = filename.replace(/\.btsx$/u, ".tsrx");
+    const client = compile(result.code, tsrxFilename, {
+      mode: "client",
+      hmr: false,
+      dev: true,
+    });
+    expect(client.diagnostics).toHaveLength(0);
+    expect(client.code).toContain("useFormStatus(0)");
+    expect(client.code).toContain("useRef(null, 1)");
+    expect(client.code).toContain(
+      "useOptimistic(names, (current, name) => [...current, name], 2)",
+    );
+    expect(client.code).toMatch(
+      /useActionState\([\s\S]*?"Save a name\.",\s*undefined,\s*3\s*\)/u,
+    );
+    expect(client.code).toContain("requestFormReset(formRef.current)");
+    expect(client.code).toContain("_$setFormAction");
+
+    const server = compile(result.code, tsrxFilename, {
+      mode: "server",
+      hmr: false,
+      dev: true,
+    });
+    expect(server.diagnostics).toHaveLength(0);
+    const rendered = await renderCompiledServer(server.code, {
+      names: ["Ada", "Grace"],
+      saveName: async () => {},
+    });
+
+    expect(rendered).toContain("<li>Ada</li>");
+    expect(rendered).toContain("<li>Grace</li>");
+    expect(rendered).toContain(">Save name</button>");
+    expect(rendered).toContain("Save a name.</p>");
   });
 
   test("lets explicit compile options override source-level props", () => {

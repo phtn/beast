@@ -1,0 +1,39 @@
+import { requestFormReset, useActionState, useFormStatus, useOptimistic, useRef } from "octane";
+module
+  function SubmitButton() @{
+    const { pending, data, method } = useFormStatus();
+    const pendingName = String(data?.get("name") ?? "");
+    <button type="submit" disabled={pending} data-method={method}>
+      {pending ? "Saving " + pendingName + "…" : "Save name"}
+    </button>
+  }
+props { names, saveName }: { names: readonly string[]; saveName: (name: string) => Promise<void> }
+setup
+  const formRef = useRef<HTMLFormElement | null>(null);
+  const [optimisticNames, addOptimisticName] = useOptimistic(
+    names,
+    (current, name: string) => [...current, name],
+  );
+  const [message, submit, isPending] = useActionState(
+    async (_previousMessage: string, formData: FormData) => {
+      const name = String(formData.get("name") ?? "").trim();
+      if (!name) return "Enter a name before saving.";
+      addOptimisticName(name);
+      await saveName(name);
+      if (formRef.current !== null) requestFormReset(formRef.current);
+      return "Saved " + name + ".";
+    },
+    "Save a name.",
+  );
+
+section.team-editor
+  h2 Team members
+  ul(aria-label="Team members")
+    each name in optimisticNames key name
+      li #{name}
+  form(ref={formRef} action={submit})
+    label
+      | Name
+      input(name="name" defaultValue="Ada")
+    SubmitButton
+  p(role="status" aria-live="polite" aria-busy={isPending}) #{message}

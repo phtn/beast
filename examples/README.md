@@ -10,6 +10,7 @@ goldens are also included in the published `beast-tsrx` package.
 
 | Example | Demonstrates |
 | --- | --- |
+| [`actions`](actions/actions.btsx) | Form action state, descendant status, optimistic output, and deferred reset |
 | [`app`](app/app.btsx) | Source imports, typed props, component composition, IDs, and dynamic classes |
 | [`boundary`](boundary/boundary.btsx) | Async `try`, `pending`, and bound `catch` output |
 | [`card`](card/card.btsx) | Nested elements, interpolation, conditions, and a hoisted loop key |

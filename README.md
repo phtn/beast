@@ -353,6 +353,40 @@ SearchResults(query={deferredQuery})
 than imposing a fixed delay. See the complete
 [responsive golden](examples/responsive/responsive.btsx).
 
+Form actions can combine action-owned state, descendant status, optimistic
+output, and an uncontrolled-field reset. The optimistic update belongs inside
+the action, while `useFormStatus` belongs in a component rendered beneath the
+form:
+
+```btsx
+import { requestFormReset, useActionState, useFormStatus, useOptimistic, useRef } from "octane";
+module
+  function SubmitButton() @{
+    const { pending } = useFormStatus();
+    <button type="submit" disabled={pending}>{pending ? "Saving…" : "Save"}</button>
+  }
+setup
+  const formRef = useRef<HTMLFormElement | null>(null);
+  const [optimisticNames, addOptimisticName] = useOptimistic(names, (current, name: string) => [...current, name]);
+  const [message, submit] = useActionState(async (_previous: string, data: FormData) => {
+    const name = String(data.get("name") ?? "").trim();
+    if (!name) return "Enter a name before saving.";
+    addOptimisticName(name);
+    await saveName(name);
+    if (formRef.current !== null) requestFormReset(formRef.current);
+    return "Saved " + name + ".";
+  }, "Save a name.");
+
+form(ref={formRef} action={submit})
+  input(name="name" defaultValue="Ada")
+  SubmitButton
+p #{message}
+```
+
+The complete [actions golden](examples/actions/actions.btsx) also validates
+empty input, exposes the pending form data to its submit button, and renders
+the optimistic collection.
+
 ### Attributes
 
 Attributes live in parentheses and may be separated by spaces or commas:
@@ -733,6 +767,7 @@ beast/
 │   └── tests/create.test.ts      # Creator safety and output tests
 ├── examples/
 │   ├── README.md                # Example index and usage notes
+│   ├── actions/                 # Form actions, optimistic state, and reset
 │   ├── app/                     # Imports and component composition
 │   ├── boundary/                # Loading and error template boundaries
 │   ├── card/                    # Conditions and a hoisted loop key
