@@ -104,8 +104,8 @@ const PUBLIC_CORE_API = [
 ] as const;
 
 describe("Octane public Core API inventory", () => {
-  test.each(PUBLIC_CORE_API)("$entry exposes every tracked API", ({ exports, names }) => {
-    const missing = names.filter((name) => !(name in exports));
+  test.each(PUBLIC_CORE_API as unknown as Array<[typeof PUBLIC_CORE_API[number]]>)("$entry exposes every tracked API", ({ exports, names }: { exports: Record<string, unknown>; names: readonly string[] }) => {
+    const missing = names.filter((name: string) => !(name in exports));
     expect(missing).toEqual([]);
   });
 });

@@ -437,7 +437,7 @@ describe('BTSX to TSRX', () => {
     const manifest = JSON.parse(await readFile(resolve('package.json'), 'utf8')) as {
       devDependencies: { octane: string }
     }
-    expect(version).toBe(manifest.devDependencies.octane)
+    expect(version).toBe(manifest.devDependencies.octane.replace(/^\^/, ''))
 
     const selector = '::view-transition-new(hero)'
     const matching = { effect: { pseudoElement: selector } } as unknown as Animation

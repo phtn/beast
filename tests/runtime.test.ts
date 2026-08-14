@@ -46,7 +46,7 @@ const DOM_GLOBALS = [
 ] as const;
 
 const originalGlobals = new Map<string, PropertyDescriptor | undefined>();
-let browser: Window;
+let browser: any;
 
 function installDom(): void {
   browser = new Window({ url: "https://beast.test/" });
@@ -135,14 +135,14 @@ async function loadFixture(name: string, mode: CompileMode): Promise<CompiledCom
   return loadCompiledComponent(await readFile(filename, "utf8"), filename, mode);
 }
 
-function requiredElement<T extends Element>(root: ParentNode, selector: string): T {
-  const element = root.querySelector<T>(selector);
+function requiredElement<T extends Element>(root: any, selector: string): T {
+  const element = (root as ParentNode).querySelector<T>(selector);
   if (element === null) throw new Error(`Expected ${selector} in the test DOM.`);
   return element;
 }
 
-function click(element: Element): void {
-  element.dispatchEvent(new browser.MouseEvent("click", { bubbles: true, cancelable: true }));
+function click(element: any): void {
+  (element as Element).dispatchEvent(new (browser as any).MouseEvent("click", { bubbles: true, cancelable: true }) as unknown as Event);
 }
 
 beforeAll(installDom);
