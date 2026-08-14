@@ -31,3 +31,6 @@ Thumbs.db
 
 # Local project archive
 /files.zip
+
+# Beast skill (separate repo nested for dev)
+beast-skill/

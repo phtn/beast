@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { spawn } from "node:child_process";
 import { realpathSync } from "node:fs";
-import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, relative, resolve } from "node:path";
 import { createInterface } from "node:readline/promises";
 import { fileURLToPath } from "node:url";
@@ -17,6 +17,7 @@ Usage:
   bun x create-beast@latest [directory] [options]
 
 Options:
+  --tailwind    Scaffold with Tailwind CSS.
   --no-install  Create files without running bun install.
   --no-git      Do not initialize a Git repository.
   --force       Write template files into a non-empty directory.
@@ -29,6 +30,7 @@ export interface CreateProjectOptions {
   force?: boolean;
   install?: boolean;
   git?: boolean;
+  tailwind?: boolean;
   /** Override used by local integration tests and prerelease channels. */
   compilerSpec?: string;
 }
@@ -54,6 +56,9 @@ export async function createProject(
     "__PROJECT_NAME__": packageName,
     "__BEAST_PACKAGE_SPEC__": options.compilerSpec ?? DEFAULT_COMPILER_SPEC,
   });
+  if (options.tailwind === true) {
+    await setupTailwind(target);
+  }
 
   let gitInitialized = false;
   if (options.git !== false && (await runCommand("git", ["--version"], cwd, "ignore")) === 0) {
@@ -85,13 +90,14 @@ export async function runCli(argv: string[]): Promise<number> {
     const install = !takeFlag(args, "--no-install");
     const git = !takeFlag(args, "--no-git");
     const force = takeFlag(args, "--force");
+    const tailwind = takeFlag(args, "--tailwind");
     const unknown = args.find((arg) => arg.startsWith("-"));
     if (unknown !== undefined) throw new Error(`Unknown option: ${unknown}`);
     if (args.length > 1) throw new Error("Create Beast accepts at most one project directory.");
 
     const directory = args[0] ?? (await askForDirectory());
     console.log(`\nCreating a Beast project in ${resolve(directory)}...\n`);
-    const result = await createProject({ directory, force, install, git });
+    const result = await createProject({ directory, force, install, git, tailwind });
     const nextDirectory = relative(process.cwd(), result.directory) || ".";
 
     console.log("\nBeast project created.");
@@ -151,12 +157,39 @@ async function copyTemplate(
       continue;
     }
     if (!entry.isFile()) continue;
+    if (entry.name === "favicon.ico") {
+      await copyFile(sourcePath, targetPath);
+      continue;
+    }
     let contents = await readFile(sourcePath, "utf8");
     for (const [placeholder, value] of Object.entries(replacements)) {
       contents = contents.replaceAll(placeholder, value);
     }
     await writeFile(targetPath, contents, "utf8");
   }
+}
+
+async function setupTailwind(target: string): Promise<void> {
+  const packageJsonPath = resolve(target, "package.json");
+  const packageJsonText = await readFile(packageJsonPath, "utf8");
+  const packageJson = JSON.parse(packageJsonText) as {
+    devDependencies?: Record<string, string>;
+    dependencies?: Record<string, string>;
+  };
+  packageJson.devDependencies ??= {};
+  packageJson.devDependencies["tailwindcss"] = "^4.1.8";
+  packageJson.devDependencies["@tailwindcss/vite"] = "^4.1.8";
+  await writeFile(packageJsonPath, `${JSON.stringify(packageJson, null, 2)}\n`, "utf8");
+
+  const viteConfigPath = resolve(target, "vite.config.ts");
+  await writeFile(
+    viteConfigPath,
+    `import { defineConfig } from "vite";\nimport tailwindcss from "@tailwindcss/vite";\nimport { beastOctane } from "beast-tsrx/vite";\n\nexport default defineConfig({\n  plugins: [tailwindcss(), beastOctane()],\n});\n`,
+    "utf8",
+  );
+
+  const stylePath = resolve(target, "src/style.css");
+  await writeFile(stylePath, `@import "tailwindcss";\n`, "utf8");
 }
 
 function normalizePackageName(name: string): string {

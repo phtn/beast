@@ -44,11 +44,16 @@ describe("create-beast", () => {
     expect(packageJson.name).toBe("my-beast-app");
     expect(packageJson.dependencies["beast-tsrx"]).toBe("file:/local/beast-tsrx.tgz");
     const app = await readFile(resolve(result.directory, "src", "App.btsx"), "utf8");
-    expect(app).toContain("props { title }: { title: string }");
+    expect(app).toContain("props { title, links }: Props");
+    expect(app).toContain("interface Props");
     expect(app).toContain("BTSX → TSRX → Octane");
+    expect(app).toContain("each link in links key link.id");
     expect(await readFile(resolve(result.directory, "vite.config.ts"), "utf8")).toContain(
       "plugins: [beastOctane()]",
     );
+    const main = await readFile(resolve(result.directory, "src", "main.ts"), "utf8");
+    expect(main).toContain("links");
+    expect(main).toContain("Beast → Octane");
   });
 
   test("refuses a non-empty directory unless force is explicit", async () => {
