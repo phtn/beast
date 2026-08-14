@@ -1,11 +1,13 @@
 import type {
-  Attr,
   BeastDocument,
   BeastNode,
   ComponentDeclaration,
   EachNode,
   ElementNode,
+  FragmentNode,
   IfNode,
+  NamedAttr,
+  StyleNode,
   SwitchNode,
   SetupDeclaration,
   TextSpan,
@@ -90,7 +92,9 @@ function generateComponent(
     lines.push("");
   }
   const rootNeedsFragment =
-    children.length !== 1 || children[0]?.kind === "text";
+    children.length !== 1 ||
+    children[0]?.kind === "text" ||
+    children[0]?.kind === "style";
   if (rootNeedsFragment) {
     lines.push(`${indent(1)}<>`);
     for (const child of children) lines.push(...generateNode(child, 2, document));
@@ -109,6 +113,10 @@ function generateNode(node: BeastNode, depth: number, document: BeastDocument): 
       return generateElement(node, depth, document);
     case "text":
       return [`${indent(depth)}${generateText(node.spans)}`];
+    case "fragment":
+      return generateFragment(node, depth, document);
+    case "style":
+      return generateStyle(node, depth);
     case "if":
       return generateIf(node, depth, document);
     case "each":
@@ -118,6 +126,26 @@ function generateNode(node: BeastNode, depth: number, document: BeastDocument): 
     case "try":
       return generateTry(node, depth, document);
   }
+}
+
+function generateFragment(
+  node: FragmentNode,
+  depth: number,
+  document: BeastDocument,
+): string[] {
+  const lines = [`${indent(depth)}<>`];
+  for (const child of node.children) lines.push(...generateNode(child, depth + 1, document));
+  lines.push(`${indent(depth)}</>`);
+  return lines;
+}
+
+function generateStyle(node: StyleNode, depth: number): string[] {
+  const lines = [`${indent(depth)}<style>`];
+  for (const cssLine of node.css.split("\n")) {
+    lines.push(cssLine.length === 0 ? "" : `${indent(depth + 1)}${cssLine}`);
+  }
+  lines.push(`${indent(depth)}</style>`);
+  return lines;
 }
 
 function generateElement(
@@ -228,10 +256,11 @@ function generateTry(node: TryNode, depth: number, document: BeastDocument): str
 }
 
 function generateAttributes(node: ElementNode, document: BeastDocument): string {
-  const attrs = [...node.attrs];
   const output: string[] = [];
 
-  const explicitId = attrs.findIndex((attr) => attr.name === "id");
+  const explicitId = node.attrs.findIndex(
+    (attr) => attr.kind === "attribute" && attr.name === "id",
+  );
   if (node.id !== null && explicitId !== -1) {
     codegenFailure(
       "BEAST2002_DUPLICATE_ID",
@@ -242,10 +271,11 @@ function generateAttributes(node: ElementNode, document: BeastDocument): string 
   }
   if (node.id !== null) output.push(`id=${JSON.stringify(node.id)}`);
 
-  const classIndexes = attrs
-    .map((attr, index) => ({ attr, index }))
-    .filter(({ attr }) => attr.name === "class" || attr.name === "className");
-  if (classIndexes.length > 1) {
+  const classAttrs = node.attrs.filter(
+    (attr): attr is NamedAttr =>
+      attr.kind === "attribute" && (attr.name === "class" || attr.name === "className"),
+  );
+  if (classAttrs.length > 1) {
     codegenFailure(
       "BEAST2003_DUPLICATE_CLASS",
       "Use only one explicit class or className attribute.",
@@ -253,35 +283,37 @@ function generateAttributes(node: ElementNode, document: BeastDocument): string 
       document,
     );
   }
-  const explicitClass = classIndexes[0];
-  if (explicitClass !== undefined) attrs.splice(explicitClass.index, 1);
-  if (node.classes.length > 0 || explicitClass !== undefined) {
-    const shorthand = node.classes.join(" ");
-    if (explicitClass === undefined) {
-      output.push(`className=${JSON.stringify(shorthand)}`);
-    } else if (explicitClass.attr.value.type === "string") {
-      const combined = [shorthand, explicitClass.attr.value.value].filter(Boolean).join(" ");
-      output.push(`className=${JSON.stringify(combined)}`);
-    } else if (explicitClass.attr.value.type === "expr") {
-      if (shorthand.length === 0) {
-        output.push(`className={${explicitClass.attr.value.code}}`);
-      } else {
-        output.push(
-          `className={[${explicitClass.attr.value.code}, ${JSON.stringify(shorthand)}].filter(Boolean).join(" ")}`,
-        );
-      }
-    } else if (shorthand.length > 0) {
-      output.push(`className=${JSON.stringify(shorthand)}`);
-    } else {
-      output.push("className");
-    }
+  const explicitClass = classAttrs[0];
+  const shorthand = node.classes.join(" ");
+  if (shorthand.length > 0 && explicitClass === undefined) {
+    output.push(`className=${JSON.stringify(shorthand)}`);
   }
 
-  for (const attr of attrs) output.push(generateAttribute(attr));
+  for (const attr of node.attrs) {
+    if (attr.kind === "spread") {
+      output.push(`{...${attr.code}}`);
+    } else if (attr === explicitClass) {
+      output.push(generateClassAttribute(attr, shorthand));
+    } else {
+      output.push(generateAttribute(attr));
+    }
+  }
   return output.join(" ");
 }
 
-function generateAttribute(attr: Attr): string {
+function generateClassAttribute(attr: NamedAttr, shorthand: string): string {
+  if (attr.value.type === "string") {
+    const combined = [shorthand, attr.value.value].filter(Boolean).join(" ");
+    return `className=${JSON.stringify(combined)}`;
+  }
+  if (attr.value.type === "expr") {
+    if (shorthand.length === 0) return `className={${attr.value.code}}`;
+    return `className={[${attr.value.code}, ${JSON.stringify(shorthand)}].filter(Boolean).join(" ")}`;
+  }
+  return shorthand.length > 0 ? `className=${JSON.stringify(shorthand)}` : "className";
+}
+
+function generateAttribute(attr: NamedAttr): string {
   const name = attr.name === "class" ? "className" : attr.name;
   switch (attr.value.type) {
     case "bool":

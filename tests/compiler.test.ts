@@ -4,7 +4,9 @@ import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { compile } from "octane/compiler";
+import { initializeHydrationEventCapture } from "octane/hydration";
 import { renderToString } from "octane/server";
+import { ViewTransitionPseudoElement, version } from "octane";
 import {
   BeastCompileError,
   compileBeast,
@@ -23,10 +25,17 @@ function getCompileError(source: string, filename = "Invalid.btsx"): BeastCompil
 }
 
 async function renderCompiledServer(code: string, props?: unknown): Promise<string> {
-  const executable = code.replace(
-    "'octane/server'",
-    JSON.stringify(import.meta.resolve("octane/server")),
-  );
+  return (await renderCompiledServerResult(code, props)).html;
+}
+
+async function renderCompiledServerResult(code: string, props?: unknown) {
+  let executable = code;
+  for (const specifier of ["octane/server", "octane/hydration"]) {
+    const resolved = JSON.stringify(import.meta.resolve(specifier));
+    executable = executable
+      .replaceAll(JSON.stringify(specifier), resolved)
+      .replaceAll(`'${specifier}'`, resolved);
+  }
   if (executable === code) throw new Error("Expected an Octane server runtime import.");
 
   const temporaryDirectory = await mkdtemp(resolve(tmpdir(), "beast-server-test-"));
@@ -36,7 +45,7 @@ async function renderCompiledServer(code: string, props?: unknown): Promise<stri
     const compiled = (await import(pathToFileURL(modulePath).href)) as {
       default: Parameters<typeof renderToString>[0];
     };
-    return renderToString(compiled.default, props).html;
+    return renderToString(compiled.default, props);
   } finally {
     await rm(temporaryDirectory, { recursive: true, force: true });
   }
@@ -68,6 +77,447 @@ describe("BTSX to TSRX", () => {
       filename: "List.btsx",
     });
     expect(output).toContain("@for (const item of items; index i; key item.id)");
+  });
+
+  test("preserves spread attributes and their authored precedence", () => {
+    const result = compileBeastResult(
+      'button.primary(type="button" {...defaults} class={className} {...overrides}) Continue\n',
+      { filename: "SpreadButton.btsx" },
+    );
+
+    expect(result.code).toContain(
+      '<button type="button" {...defaults} className={[className, "primary"].filter(Boolean).join(" ")} {...overrides}>',
+    );
+    const button = result.ast.children[0];
+    expect(button?.kind).toBe("element");
+    if (button?.kind === "element") {
+      expect(button.attrs).toMatchObject([
+        { kind: "attribute", name: "type", value: { type: "string", value: "button" } },
+        { kind: "spread", code: "defaults" },
+        { kind: "attribute", name: "class", value: { type: "expr", code: "className" } },
+        { kind: "spread", code: "overrides" },
+      ]);
+    }
+  });
+
+  test("emits explicit fragments and verbatim scoped style blocks", async () => {
+    const filename = resolve("examples/styling/styling.btsx");
+    const source = await readFile(filename, "utf8");
+    const result = compileBeastResult(source, { filename });
+
+    expect(result.ast.children[0]).toMatchObject({
+      kind: "fragment",
+      children: [
+        { kind: "element" },
+        {
+          kind: "style",
+          css: [
+            ".card {",
+            "  padding: 1rem;",
+            "}",
+            "",
+            ".card h2 {",
+            "  color: rebeccapurple;",
+            "}",
+            "",
+            ":global(body) {",
+            "  margin: 0;",
+            "}",
+          ].join("\n"),
+        },
+      ],
+    });
+    expect(result.code).toContain("\t<>\n\t\t<article className=\"card\" {...cardProps}>");
+    expect(result.code).toContain(
+      "\t\t<style>\n\t\t\t.card {\n\t\t\t  padding: 1rem;\n\t\t\t}",
+    );
+
+    const tsrxFilename = filename.replace(/\.btsx$/u, ".tsrx");
+    const client = compile(result.code, tsrxFilename, {
+      mode: "client",
+      hmr: false,
+      dev: true,
+    });
+    expect(client.diagnostics).toHaveLength(0);
+    expect(client.code).toContain("injectStyle");
+    expect(client.code).toContain("snapshotSpread");
+
+    const server = compile(result.code, tsrxFilename, {
+      mode: "server",
+      hmr: false,
+      dev: true,
+    });
+    expect(server.diagnostics).toHaveLength(0);
+    const rendered = await renderCompiledServerResult(server.code, {
+      title: "Scoped card",
+      cardProps: { "data-tone": "bright" },
+    });
+
+    expect(rendered.html).toMatch(
+      /<article class="card tsrx-[a-z0-9]+" data-tone="bright">/u,
+    );
+    expect(rendered.css).toContain("padding: 1rem;");
+    expect(rendered.css).toContain("color: rebeccapurple;");
+    expect(rendered.css).toContain("body {");
+    expect(rendered.css).toContain("margin: 0;");
+  });
+
+  test.each([
+    ["empty fragment", "fragment\n", "BEAST1901_EMPTY_FRAGMENT"],
+    ["empty style", "style\n", "BEAST1902_EMPTY_STYLE"],
+    ["empty spread", "button({...})\n", "BEAST1202_INVALID_ATTRIBUTE"],
+    ["non-spread braces", "button({props})\n", "BEAST1202_INVALID_ATTRIBUTE"],
+  ])("reports invalid element syntax for %s", (_label, source, code) => {
+    expect(getCompileError(source, "InvalidElement.btsx").diagnostic.code).toBe(code);
+  });
+
+  test("compiles advanced hook APIs and preserves their server semantics", async () => {
+    const filename = resolve("examples/hooks/hooks.btsx");
+    const source = await readFile(filename, "utf8");
+    const result = compileBeastResult(source, { filename });
+
+    for (const api of [
+      "memo(",
+      "useCallback(",
+      "useDebugValue(",
+      "useEffectEvent(",
+      "useId(",
+      "useImperativeHandle(",
+      "useInsertionEffect(",
+      "useLayoutEffect(",
+      "useReducer(",
+    ]) {
+      expect(result.code).toContain(api);
+    }
+
+    const tsrxFilename = filename.replace(/\.btsx$/u, ".tsrx");
+    const client = compile(result.code, tsrxFilename, {
+      mode: "client",
+      hmr: false,
+      dev: true,
+    });
+    expect(client.diagnostics).toHaveLength(0);
+    expect(client.code).toContain("__useReducerWithGetter");
+    expect(client.code).toContain("useMemo(() => memo(CountSummary, sameSummary), [], 2)");
+    expect(client.code).toContain("useCallback(() => dispatch({ type: \"increment\" }), [], 3)");
+    expect(client.code).toContain("useEffectEvent(() => onReport(getCount()), 4)");
+    expect(client.code).toContain("useImperativeHandle(handleRef");
+    expect(client.code).toContain("useInsertionEffect(");
+    expect(client.code).toContain("useLayoutEffect(");
+
+    const server = compile(result.code, tsrxFilename, {
+      mode: "server",
+      hmr: false,
+      dev: true,
+    });
+    expect(server.diagnostics).toHaveLength(0);
+    const phases: string[] = [];
+    const reports: number[] = [];
+    const handleRef: { current: { reset(): void; read(): number } | null } = {
+      current: null,
+    };
+    const rendered = await renderCompiledServerResult(server.code, {
+      initialCount: 3,
+      handleRef,
+      onPhase: (phase: string) => phases.push(phase),
+      onReport: (count: number) => reports.push(count),
+    });
+
+    const id = rendered.html.match(/aria-labelledby="([^"]+)"/u)?.[1];
+    expect(id).toBeDefined();
+    expect(rendered.html).toContain(`<h2 id="${id}">Advanced hooks</h2>`);
+    expect(rendered.html).toContain("<p>Reducer count: <!--[-->6<!--]--></p>");
+    expect(phases).toEqual([]);
+    expect(reports).toEqual([]);
+    expect(handleRef.current).toBeNull();
+  });
+
+  test("renders Promise use outcomes and every Activity mode", async () => {
+    const filename = resolve("examples/async/async.btsx");
+    const source = await readFile(filename, "utf8");
+    const result = compileBeastResult(source, { filename });
+    const tsrxFilename = filename.replace(/\.btsx$/u, ".tsrx");
+
+    const client = compile(result.code, tsrxFilename, {
+      mode: "client",
+      hmr: false,
+      dev: true,
+    });
+    expect(client.diagnostics).toHaveLength(0);
+    expect(client.code).toContain("activityBlock");
+    expect(client.code).toContain('"visible", __activity');
+    expect(client.code).toContain('"hidden", __activity');
+    expect(client.code).toContain('"prerender", __activity');
+    expect(client.code).toContain("const resolved = use(");
+
+    const server = compile(result.code, tsrxFilename, {
+      mode: "server",
+      hmr: false,
+      dev: true,
+    });
+    expect(server.diagnostics).toHaveLength(0);
+
+    const fulfilled = await renderCompiledServerResult(server.code, {
+      profile: {
+        status: "fulfilled",
+        value: { name: "Ada", role: "Engineer" },
+        then() {},
+      },
+    });
+    expect(fulfilled.html).toContain('<article class="profile"><h2>Ada</h2>');
+    expect(fulfilled.html).toContain("<p>Engineer</p>");
+    expect(fulfilled.html).toContain("<p>Visible activity</p>");
+    expect(fulfilled.html).not.toContain("Hidden activity");
+    expect(fulfilled.html).toContain("<p>Prerendered activity</p>");
+
+    const pending = await renderCompiledServerResult(server.code, {
+      profile: { status: "pending", then() {} },
+    });
+    expect(pending.html).toContain("Loading profile…");
+    expect(pending.html).not.toContain('<article class="profile">');
+
+    const rejected = await renderCompiledServerResult(server.code, {
+      profile: { status: "rejected", reason: new Error("Unavailable"), then() {} },
+    });
+    expect(rejected.html).toContain("Profile failed.");
+    expect(rejected.html).toContain('"message":"Unavailable"');
+  });
+
+  test("covers every hydration strategy and the complete Hydrate prop surface", async () => {
+    const filename = resolve("examples/hydration/hydration.btsx");
+    const source = await readFile(filename, "utf8");
+    const result = compileBeastResult(source, { filename });
+
+    for (const call of [
+      "load()",
+      "idle({ timeout: 1000 })",
+      'visible({ rootMargin: "300px", threshold: [0, 0.5] })',
+      'media("(min-width: 64rem)")',
+      'interaction({ events: ["focusin", "click"] })',
+      "condition(enabled)",
+      "never()",
+    ]) {
+      expect(result.code).toContain(call);
+    }
+    expect(result.code).toContain("prefetch={prefetchPanel}");
+    expect(result.code).toContain('fallback="Preparing editor…"');
+    expect(result.code).toContain("onHydrated={onHydrated}");
+
+    const tsrxFilename = filename.replace(/\.btsx$/u, ".tsrx");
+    const client = compile(result.code, tsrxFilename, {
+      mode: "client",
+      hmr: false,
+      dev: true,
+    });
+    expect(client.diagnostics).toHaveLength(0);
+    expect(client.code).toContain("Hydrate.__octanePermanentStatic");
+    expect(client.code).toContain('?octane-hydrate=8"');
+    expect(client.code).toContain("'prefetch': prefetchPanel");
+
+    const splitChild = compile(result.code, `${tsrxFilename}?octane-hydrate=8`, {
+      mode: "client",
+      hmr: false,
+      dev: true,
+    });
+    expect(splitChild.diagnostics).toHaveLength(0);
+    expect(splitChild.code).toContain("__OctaneHydrateBoundary_8");
+    expect(splitChild.code).toContain("Split and prefetched");
+
+    const server = compile(result.code, tsrxFilename, {
+      mode: "server",
+      hmr: false,
+      dev: true,
+    });
+    expect(server.diagnostics).toHaveLength(0);
+    const hydrated: string[] = [];
+    const warmed: AbortSignal[] = [];
+    const rendered = await renderCompiledServerResult(server.code, {
+      enabled: true,
+      onHydrated: () => hydrated.push("done"),
+      warm: async (signal: AbortSignal) => {
+        warmed.push(signal);
+      },
+    });
+
+    for (const strategy of [
+      "load",
+      "idle",
+      "visible",
+      "media",
+      "interaction",
+      "condition",
+      "dynamic",
+    ]) {
+      expect(rendered.html).toContain(`data-octane-hydrate-when="${strategy}"`);
+    }
+    expect(rendered.html).toContain(
+      'data-octane-hydrate-interaction-events="focusin click"',
+    );
+    expect(rendered.html).toContain("<!--octane-static-hydrate:0-->");
+    expect(rendered.html).toContain("<h2>Never</h2>");
+    expect(rendered.html).toContain("<h2>Procedural prefetch</h2>");
+    expect(hydrated).toEqual([]);
+    expect(warmed).toEqual([]);
+  });
+
+  test("installs early hydration event capture once per document", () => {
+    const registrations: Array<{ type: string; capture: boolean }> = [];
+    const ownerDocument = {
+      addEventListener(type: string, _listener: EventListener, capture: boolean) {
+        registrations.push({ type, capture });
+      },
+    } as unknown as Document;
+
+    initializeHydrationEventCapture(ownerDocument);
+    const firstCount = registrations.length;
+    initializeHydrationEventCapture(ownerDocument);
+
+    expect(firstCount).toBeGreaterThan(0);
+    expect(registrations).toHaveLength(firstCount);
+    expect(new Set(registrations.map(({ type }) => type)).size).toBe(firstCount);
+    expect(registrations.every(({ capture }) => capture)).toBe(true);
+  });
+
+  test("renders resource hints and executes descriptor and Children helpers", async () => {
+    const filename = resolve("examples/library/library.btsx");
+    const source = await readFile(filename, "utf8");
+    const result = compileBeastResult(source, { filename });
+    const tsrxFilename = filename.replace(/\.btsx$/u, ".tsrx");
+
+    const client = compile(result.code, tsrxFilename, {
+      mode: "client",
+      hmr: false,
+      dev: true,
+    });
+    expect(client.diagnostics).toHaveLength(0);
+    for (const api of [
+      "Children.forEach",
+      "Children.map",
+      "Children.count",
+      "Children.toArray",
+      "Children.only",
+      "cloneElement",
+      "createElement",
+      "isChildrenBlock",
+      "isValidElement",
+      "preconnect",
+      "prefetchDNS",
+      "preinit",
+      "preinitModule",
+      "preload",
+      "preloadModule",
+    ]) {
+      expect(client.code).toContain(api);
+    }
+    expect(client.code).toContain("markChildrenBlock");
+
+    const server = compile(result.code, tsrxFilename, {
+      mode: "server",
+      hmr: false,
+      dev: true,
+    });
+    expect(server.diagnostics).toHaveLength(0);
+    const rendered = await renderCompiledServerResult(server.code);
+
+    expect(rendered.html.match(/<link rel="preload"[^>]*beast\.woff2[^>]*>/gu)).toHaveLength(1);
+    expect(rendered.html).toContain(
+      '<link rel="stylesheet" href="/assets/app.css" data-precedence="critical">',
+    );
+    expect(rendered.html).toContain(
+      '<script src="/assets/runtime.js" async data-oct-res=""></script>',
+    );
+    expect(rendered.html).toContain(
+      '<link rel="modulepreload" href="/assets/chart.js" crossorigin="anonymous"',
+    );
+    expect(rendered.html).toContain(
+      '<script type="module" src="/assets/editor.js" async',
+    );
+    expect(rendered.html).toContain(
+      '<link rel="preconnect" href="https://api.example.com" crossorigin="anonymous"',
+    );
+    expect(rendered.html).toContain(
+      '<link rel="dns-prefetch" href="https://cdn.example.com"',
+    );
+    expect(rendered.html.indexOf("/assets/app.css")).toBeLessThan(
+      rendered.html.indexOf('<section class="library-apis">'),
+    );
+    expect(rendered.html).toContain(
+      '<p data-count="4" data-flattened="2" data-visited="4" data-valid="true">',
+    );
+    expect(rendered.html).toContain(
+      '<li class="base" data-kind="base" data-index="0">Base</li>',
+    );
+    expect(rendered.html).toContain(
+      '<li class="cloned" data-kind="clone" data-index="3">Cloned</li>',
+    );
+    expect(rendered.html).toContain(
+      '<section class="children-probe" data-children-block="true">',
+    );
+  });
+
+  test("passes through version and ViewTransitionPseudoElement integrations", async () => {
+    const source = [
+      'import { ViewTransitionPseudoElement, version } from "octane";',
+      "module",
+      "  export function animateHero() {",
+      '    const pseudo = new ViewTransitionPseudoElement("new", "hero");',
+      "    return pseudo.animate([{ opacity: 0 }, { opacity: 1 }], 180);",
+      "  }",
+      "p Octane #{version}",
+    ].join("\n");
+    const result = compileBeastResult(source, { filename: "RuntimeInfo.btsx" });
+    const client = compile(result.code, "RuntimeInfo.tsrx", {
+      mode: "client",
+      hmr: false,
+      dev: true,
+    });
+
+    expect(client.diagnostics).toHaveLength(0);
+    expect(client.code).toContain("ViewTransitionPseudoElement");
+    expect(client.code).toContain("version");
+    const manifest = JSON.parse(await readFile(resolve("package.json"), "utf8")) as {
+      devDependencies: { octane: string };
+    };
+    expect(version).toBe(manifest.devDependencies.octane);
+
+    const selector = "::view-transition-new(hero)";
+    const matching = { effect: { pseudoElement: selector } } as unknown as Animation;
+    const other = {
+      effect: { pseudoElement: "::view-transition-old(hero)" },
+    } as unknown as Animation;
+    const calls: Array<{ keyframes: unknown; options: unknown }> = [];
+    const previousDocument = Object.getOwnPropertyDescriptor(globalThis, "document");
+    Object.defineProperty(globalThis, "document", {
+      configurable: true,
+      value: {
+        documentElement: {
+          animate(keyframes: unknown, options: unknown) {
+            calls.push({ keyframes, options });
+            return matching;
+          },
+          getAnimations() {
+            return [matching, other];
+          },
+        },
+      },
+    });
+
+    try {
+      const pseudo = new ViewTransitionPseudoElement("new", "hero");
+      const keyframes = [{ opacity: 0 }, { opacity: 1 }];
+      expect(pseudo.selector).toBe(selector);
+      expect(pseudo.animate(keyframes, 180)).toBe(matching);
+      expect(calls).toEqual([
+        { keyframes, options: { duration: 180, pseudoElement: selector } },
+      ]);
+      expect(pseudo.getAnimations()).toEqual([matching]);
+    } finally {
+      if (previousDocument === undefined) {
+        delete (globalThis as { document?: Document }).document;
+      } else {
+        Object.defineProperty(globalThis, "document", previousDocument);
+      }
+    }
   });
 
   test("emits Octane empty branches for loops", () => {
@@ -575,6 +1025,90 @@ describe("BTSX to TSRX", () => {
     expect(rendered).toContain(">Activity</button>");
     expect(rendered).toContain("<p>Overview is ready.</p>");
     expect(rendered).toContain("<p>Showing results for all products</p>");
+  });
+
+  test("compiles and server-renders view-transition boundaries", async () => {
+    const filename = resolve("examples/transitions/transitions.btsx");
+    const source = await readFile(filename, "utf8");
+    const result = compileBeastResult(source, { filename });
+
+    expect(result.code).toContain(
+      'addTransitionType(next === "activity" ? "forward" : "backward")',
+    );
+    expect(result.code).toContain(
+      '<ViewTransition name="project-panel" enter="panel-enter" exit="panel-exit"',
+    );
+    expect(result.code).toContain(
+      'update={{ default: "panel-update", forward: "slide-left", backward: "slide-right" }}',
+    );
+
+    const tsrxFilename = filename.replace(/\.btsx$/u, ".tsrx");
+    const client = compile(result.code, tsrxFilename, {
+      mode: "client",
+      hmr: false,
+      dev: true,
+    });
+    expect(client.diagnostics).toHaveLength(0);
+    expect(client.code).toContain("_$__vtSeen();");
+    expect(client.code).toContain("addTransitionType(next === \"activity\"");
+    expect(client.code).toContain("ViewTransition,");
+
+    const server = compile(result.code, tsrxFilename, {
+      mode: "server",
+      hmr: false,
+      dev: true,
+    });
+    expect(server.diagnostics).toHaveLength(0);
+    const rendered = await renderCompiledServer(server.code);
+
+    expect(rendered).toContain(
+      '<article class="project-panel" vt-name="project-panel" vt-update="panel-update" vt-share="auto">',
+    );
+    expect(rendered).toContain("<h3>Overview</h3>");
+    expect(rendered).toContain("<p>Overview is ready.</p>");
+  });
+
+  test("compiles portal descriptors and preserves their server placeholder", async () => {
+    const filename = resolve("examples/portal/portal.btsx");
+    const source = await readFile(filename, "utf8");
+    const result = compileBeastResult(source, { filename });
+
+    expect(result.code).toContain(
+      "return createPortal(ToastBody, target, { onDismiss });",
+    );
+    expect(result.code).toContain('<section className="editor" onClick={onBubble}>');
+    expect(result.code).toContain(
+      '<SavedToast target={target} onDismiss={onDismiss} />',
+    );
+
+    const tsrxFilename = filename.replace(/\.btsx$/u, ".tsrx");
+    const client = compile(result.code, tsrxFilename, {
+      mode: "client",
+      hmr: false,
+      dev: true,
+    });
+    expect(client.diagnostics).toHaveLength(0);
+    expect(client.code).toContain(
+      "return createPortal(ToastBody, target, { onDismiss });",
+    );
+    expect(client.code).toContain("SavedToast, { 'target': target");
+
+    const server = compile(result.code, tsrxFilename, {
+      mode: "server",
+      hmr: false,
+      dev: true,
+    });
+    expect(server.diagnostics).toHaveLength(0);
+    const rendered = await renderCompiledServer(server.code, {
+      target: {},
+      onDismiss: () => {},
+      onBubble: () => {},
+    });
+
+    expect(rendered).toContain('<section class="editor">');
+    expect(rendered).toContain("Portal clicks still follow their logical Beast parent.");
+    expect(rendered).toContain("<!---->");
+    expect(rendered).not.toContain("Draft saved.");
   });
 
   test("compiles and server-renders action and form hooks", async () => {

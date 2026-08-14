@@ -8,7 +8,7 @@
 [![Status: Alpha](https://img.shields.io/badge/status-alpha-d97706?style=flat-square)](#project-status)
 [![Version](https://img.shields.io/badge/version-0.1.0-6f42c1?style=flat-square)](package.json)
 [![Node.js](https://img.shields.io/badge/Node.js-%E2%89%A522.22.2-339933?style=flat-square&logo=nodedotjs&logoColor=white)](package.json)
-[![Octane](https://img.shields.io/badge/Octane-0.1.32-111827?style=flat-square)](https://octanejs.dev/)
+[![Octane](https://img.shields.io/badge/Octane-0.1.37-111827?style=flat-square)](https://octanejs.dev/)
 [![License: ISC](https://img.shields.io/badge/license-ISC-0f766e?style=flat-square)](LICENSE)
 
 **Write the structure. Keep the types. Let Octane own rendering.**
@@ -309,6 +309,32 @@ The same `ref={...}` attribute can be passed to a component that declares a
 ref prop; Beast does not require or insert a forwarding wrapper. See the
 complete [refs golden](examples/refs/refs.btsx).
 
+The remaining component hook APIs use the same setup passthrough. The
+[advanced hooks golden](examples/hooks/hooks.btsx) combines an initialized
+`useReducer` (including its current-state getter), `useId`, `useCallback`,
+`memo`, `useEffectEvent`, `useImperativeHandle`, insertion/layout effects, and
+`useDebugValue` in one component. For example:
+
+```btsx
+setup
+  const [count, dispatch, getCount] = useReducer(reduceCount, initialCount, (value) => value * 2);
+  const descriptionId = useId();
+  const increment = useCallback(() => dispatch({ type: "increment" }));
+  const reportLatest = useEffectEvent(() => onReport(getCount()));
+  useImperativeHandle(handleRef, () => ({ read: getCount }));
+  useLayoutEffect(() => onPhase("layout"));
+
+section(aria-labelledby={descriptionId})
+  h2(id={descriptionId}) Advanced hooks
+  button(type="button" onClick={increment}) Increment
+  button(type="button" onClick={reportLatest}) Report latest
+```
+
+Octane infers dependencies when the optional arrays are omitted. The
+conformance test checks the lowered hook slots and server rendering, including
+the rule that insertion/layout effects and imperative handle attachment do not
+run during SSR.
+
 For state already owned outside Octane, keep subscription and snapshot
 functions stable at module scope, then call `useSyncExternalStore` from setup.
 Its third argument provides a deterministic server snapshot:
@@ -351,6 +377,89 @@ SearchResults(query={deferredQuery})
 `useDeferredValue` is not a debounce; it controls which render may lag rather
 than imposing a fixed delay. See the complete
 [responsive golden](examples/responsive/responsive.btsx).
+
+View transitions wrap the DOM region whose visual state should animate. Start
+the update as a transition, and use `addTransitionType` when one boundary needs
+different classes for different navigation directions:
+
+```btsx
+import { ViewTransition, addTransitionType, startTransition, useState } from "octane";
+module type Tab = "overview" | "activity";
+setup const [tab, setTab] = useState<Tab>("overview");
+setup
+  const selectTab = (next: Tab) => {
+    startTransition(() => {
+      addTransitionType(next === "activity" ? "forward" : "backward");
+      setTab(next);
+    });
+  };
+
+button(onClick={() => selectTab("activity")}) Activity
+ViewTransition(name="project-panel" update={{ default: "panel-update", forward: "slide-left", backward: "slide-right" }})
+  article #{tab === "overview" ? "Overview" : "Activity"}
+```
+
+Beast preserves the boundary, callbacks, and class maps as native Octane
+component props. The complete
+[transitions golden](examples/transitions/transitions.btsx) also covers enter
+and exit classes, typed navigation state, Octane's client preload hint, and
+server transition annotations.
+
+Advanced integrations can use `ViewTransitionPseudoElement` to target a
+boundary's group, image-pair, old, or new pseudo-element through the Web
+Animations API. The conformance suite verifies its selector, animation options,
+and filtered `getAnimations()` result, and also checks Octane's exported
+`version` against Beast's pinned dependency.
+
+Portals use a normal module helper that returns `createPortal`. A tagless local
+component can be passed as the portal body, so BTSX does not need to embed a
+TSRX fragment inside the call:
+
+```btsx
+import { createPortal } from "octane";
+module
+  interface SavedToastProps { target: HTMLElement; onDismiss: () => void }
+  function SavedToast({ target, onDismiss }: SavedToastProps) {
+    return createPortal(ToastBody, target, { onDismiss });
+  }
+
+component ToastBody
+  props { onDismiss }: { onDismiss: () => void }
+  aside.toast
+    p(role="status") Draft saved.
+    button(type="button" onClick={onDismiss}) Dismiss
+props { target, onDismiss }: SavedToastProps
+
+SavedToast(target={target} onDismiss={onDismiss})
+```
+
+The optional third argument supplies props to the portal body. The complete
+[portal golden](examples/portal/portal.btsx) keeps the physical overlay under
+its logical Beast parent so Octane can preserve context and event ancestry.
+
+Library code can create and adapt renderable descriptors without embedding
+TSRX tags inside setup. `Children` supplies React-shaped traversal helpers,
+while `isValidElement` and `isChildrenBlock` distinguish descriptors from a
+compiled component-children function:
+
+```btsx
+import { Children, cloneElement, createElement, isValidElement } from "octane";
+setup
+  const base = createElement("li", { key: "base" }, "Base");
+  const cloned = cloneElement(base, { className: "selected" }, "Cloned");
+  const mapped = Children.map([base, null, cloned], (child, index) =>
+    isValidElement(child) ? cloneElement(child, { "data-index": index }) : child
+  );
+
+ul
+  | #{mapped}
+```
+
+Resource hints are also ordinary setup calls. `preload`, `preinit`,
+`preloadModule`, `preinitModule`, `preconnect`, and `prefetchDNS` pass through
+to Octane, which deduplicates them and collects their server tags ahead of the
+rendered body. The complete [library golden](examples/library/library.btsx)
+executes all descriptor/inspection helpers and all six resource APIs.
 
 Form actions can combine action-owned state, descendant status, optimistic
 output, and an uncontrolled-field reset. The optimistic update belongs inside
@@ -405,10 +514,12 @@ Button(tone="primary" count={items.length} disabled) Continue
 | `name='value'` | Single-quoted string attribute |
 | `name={expression}` | TypeScript expression attribute |
 | `disabled` | Boolean attribute |
+| `{...props}` | Ordered TypeScript spread attribute |
 
 `class` is normalized to `className`. Selector shorthand and an explicit class
 are combined; conflicting ID declarations and duplicate explicit class
-attributes are rejected.
+attributes are rejected. Spreads retain their authored position relative to
+named attributes, so later entries keep normal TSRX override precedence.
 
 ### Text and interpolation
 
@@ -427,6 +538,41 @@ div.notice
 
 Literal text is escaped in generated TSRX. Embedded expressions remain source
 slices and receive their final syntax validation from Octane.
+
+### Explicit fragments and scoped styles
+
+Use `fragment` when a specific subtree should compile to a native TSRX
+fragment, even when Beast would not need to insert one automatically:
+
+```btsx
+fragment
+  Header
+  main Content
+```
+
+A `style` node consumes its indented body as raw CSS. Octane scopes its
+selectors to the owning component, stamps the matching scope class on rendered
+elements, and collects the stylesheet during server rendering. Wrap a selector
+in `:global(...)` when it must remain unscoped:
+
+```btsx
+fragment
+  article.card({...cardProps})
+    h2 #{title}
+  style
+    .card {
+      padding: 1rem;
+    }
+
+    :global(body) {
+      margin: 0;
+    }
+```
+
+Beast removes only the CSS block's common source indentation and otherwise
+preserves its text. See the complete
+[styling golden](examples/styling/styling.btsx) for explicit fragments,
+ordered prop spreading, scoped descendants, and a global escape.
 
 ### Conditions
 
@@ -517,6 +663,28 @@ optional pair of parentheses. Their TypeScript binding syntax is preserved for
 Octane to validate. Every authored boundary arm must contain at least one
 template node.
 
+Promise-valued `use()` is an ordinary setup call. Pending reads reach the
+nearest `Suspense`, rejected reads reach `ErrorBoundary`, and fulfilled reads
+continue into the component body:
+
+```btsx
+import { ErrorBoundary, Suspense, use } from "octane";
+
+component AsyncProfile
+  props { profile }: { profile: PromiseLike<ProfileData> }
+  setup const resolved = use(profile);
+  h2 #{resolved.name}
+
+ErrorBoundary(fallback="Profile failed.")
+  Suspense(fallback="Loading profile…")
+    AsyncProfile(profile={profile})
+```
+
+The [async golden](examples/async/async.btsx) executes all three server
+outcomes. It also covers `Activity` in `visible`, `hidden`, and `prerender`
+modes; hidden content is omitted from server output while the other two modes
+render their subtree.
+
 Octane's component boundaries and hydration strategies compose through normal
 imports, attributes, and nesting. A lazy component suspends into the nearest
 `Suspense`; a rejected load reaches the nearest `ErrorBoundary`. `Hydrate`
@@ -535,14 +703,70 @@ ErrorBoundary(fallback="The dashboard could not be loaded.")
 ```
 
 This focused form opts out of Hydrate's child-chunk extraction while still
-deferring interactivity. Compiler-split Hydrate boundaries belong in a full
-SSR/hydration bundler lifecycle. See the complete
+deferring interactivity. See the complete
 [deferred golden](examples/deferred/deferred.btsx).
+
+The [hydration golden](examples/hydration/hydration.btsx) covers `load`, `idle`,
+`visible`, `media`, `interaction`, `condition`, and `never`, including the
+function form for browser-only strategy selection. It also exercises default
+child splitting, strategy and procedural prefetching, `fallback`,
+`onHydrated`, and the permanent-static `split={false}` plus `when={never()}`
+form. Its conformance test compiles the extracted child query and executes the
+server markers for every strategy.
+
+Applications that may receive input before `hydrateRoot()` should call
+`initializeHydrationEventCapture()` from their lightweight bootstrap. The API
+is idempotent per document; Beast's test invokes it twice and verifies each
+supported capture listener is installed only once.
+
+### Client roots and existing-DOM behavior
+
+Compiled Beast components use Octane's normal root lifecycle. Mount with
+`createRoot(container).render(Component, props)`, or pass the server-rendered
+component and matching props to `hydrateRoot(container, Component, props)` to
+adopt its existing DOM. The returned root can update the same component in
+place and owns its eventual `unmount()` cleanup.
+
+`flushSync()` makes a scheduled DOM commit observable before the callback
+returns. Tests and integration harnesses should use `act()` to settle render
+work and insertion, layout, and passive effects before asserting. Beast's
+executable DOM suite covers both APIs, full-root adoption, an
+interaction-gated `Hydrate` boundary with first-event replay, and portal
+mount/update/unmount behavior.
+
+Existing markup that must not be reconciled can instead use
+`attachBehaviorRoot()` from `octane/behavior`. Behavior roots adopt matching
+elements, delegate events, and honor independently owned ranges while leaving
+their DOM intact on normal disposal. This is an application-bootstrap API; it
+does not require additional BTSX grammar.
+
+### Server and static rendering
+
+Server entry points consume the same component produced from BTSX; no separate
+authoring syntax is required. Choose the renderer by delivery goal:
+
+| Goal | Entry point |
+| --- | --- |
+| One synchronous hydratable pass | `renderToString` from `octane/server` |
+| Marker-free HTML that will not hydrate | `renderToStaticMarkup` from `octane/server` |
+| Progressive Node response | `renderToPipeableStream` from `octane/server` |
+| Progressive Web `ReadableStream` | `renderToReadableStream` from `octane/server` |
+| Fully resolved buffered output | `prerender` from `octane/static` |
+| Fully resolved Node prelude | `prerenderToNodeStream` from `octane/static` |
+
+Buffered renderers return separate `html` and deduplicated scoped `css`
+channels. Head elements fold into `html` by default or can be requested through
+the separate head channel. Streaming renders send a Suspense shell first and
+reveal completed boundaries later; the Web form exposes `allReady` for final
+completion. The renderer suite also verifies CSP nonces, request aborts,
+per-render deadlines, and the global `setSsrSuspenseTimeout()` /
+`getSsrSuspenseTimeout()` controls.
 
 ### Comments and roots
 
 Lines beginning with `//` are omitted from output. A component with multiple
-root nodes, no root node, or a text-only root is wrapped in a TSRX fragment.
+root nodes, no root node, a text-only root, or a style-only root is wrapped in
+a TSRX fragment. An authored `fragment` always remains explicit in the output.
 
 ## CLI reference
 
@@ -728,7 +952,7 @@ validation from Octane.
 | Bun | Current stable | Workspace, tests, project creation, and dependency installation |
 | TypeScript | `^5.9.3` | Package declarations and generated-project checking |
 | TSRX TypeScript plugin | `0.3.118` | `.tsrx` and `.btsx` project type checking |
-| Octane | `0.1.32` | TSRX validation, lowering, and runtime |
+| Octane | `0.1.37` | TSRX validation, lowering, and runtime |
 | Vite | `^8.0.16` | Development server and production bundling |
 
 Octane and TSRX are evolving. Beast pins the versions used by its conformance
@@ -740,6 +964,14 @@ The current suite and release checks verify the behavior Beast claims publicly:
 
 - BTSX fixtures must match committed TSRX output byte for byte.
 - Every golden TSRX fixture must compile through Octane without diagnostics.
+- Every tracked Core API name must remain exported from its pinned public
+  Octane entry point.
+- Compiled client roots must mount, update, hydrate existing nodes, activate
+  deferred boundaries, preserve portal event ancestry, and dispose owned work.
+- Behavior-only roots must honor external ownership and retain existing DOM on
+  disposal.
+- Server renderers must preserve hydratable/static distinctions, stream
+  Suspense completion through Node and Web transports, and bound async work.
 - Recursive builds must mirror paths, emit a versioned manifest, and safely
   remove only stale outputs tracked by the previous manifest.
 - Mixed `.btsx` and native `.tsrx` applications must complete a production
@@ -773,6 +1005,7 @@ beast/
 │   ├── README.md                # Example index and usage notes
 │   ├── actions/                 # Form actions, optimistic state, and reset
 │   ├── app/                     # Imports and component composition
+│   ├── async/                   # Promise use, Suspense outcomes, and Activity
 │   ├── boundary/                # Loading and error template boundaries
 │   ├── card/                    # Conditions and a hoisted loop key
 │   ├── catalog/                 # Attributes and an explicit loop key
@@ -780,18 +1013,27 @@ beast/
 │   ├── deferred/                # Lazy boundaries and deferred hydration
 │   ├── editor/                  # Linked controlled input and native events
 │   ├── fragment/                # Multiple roots, text, and escaping
+│   ├── hooks/                   # Reducer, effect phases, IDs, memo, and handles
+│   ├── hydration/               # Strategies, prefetch, splitting, and capture
+│   ├── library/                 # Descriptors, Children helpers, and resources
 │   ├── network/                 # External-store subscription and SSR snapshot
+│   ├── portal/                  # Cross-container rendering and logical ancestry
 │   ├── provider/                # Context provider and consumer hooks
 │   ├── refs/                    # Callback, object, and array refs
 │   ├── responsive/              # Transitions and deferred search output
 │   ├── shortcut/                # Multiline source and effect cleanup
 │   ├── status/                  # Nested loops and branch chains
+│   ├── styling/                 # Spreads, explicit fragments, and scoped CSS
+│   ├── transitions/             # View-transition classes and typed directions
 │   └── variant/                 # Multi-way switch output
 ├── docs/
 │   └── octane-coverage.md       # Official-doc coverage map and roadmap
 ├── tests/
-│   ├── compiler.test.ts         # Compiler and Octane conformance tests
-│   └── project.test.ts          # Project builder and Vite tests
+│   ├── compiler.test.ts         # Compiler and Octane behavior conformance
+│   ├── core-api.test.ts         # Pinned public Core API export inventory
+│   ├── project.test.ts          # Project builder and Vite tests
+│   ├── runtime.test.ts          # Client hydration, roots, portals, and behavior
+│   └── server.test.ts           # Buffered, streaming, and static rendering
 ├── package.json                 # `beast-tsrx` package and workspace root
 └── tsconfig.json
 ```
@@ -838,8 +1080,6 @@ Current limitations:
 
 - The CLI builder has no per-file configuration file; use the programmatic API
   or Vite component options.
-- Spread attributes, explicit source fragments, and raw style blocks are not
-  exposed in BTSX.
 - Beast-to-TSRX source maps are not implemented. Vite currently returns
   Octane's map for the generated TSRX layer.
 - Standalone watch mode is not implemented; Vite owns watched application
@@ -851,7 +1091,10 @@ Current limitations:
 See the [golden example index](examples/README.md) for focused BTSX inputs and
 the exact generated TSRX output contract. The living
 [Octane coverage map](docs/octane-coverage.md) separates supported runtime APIs
-from BTSX syntax and integration work that still remains.
+from BTSX syntax and integration work that still remains. Its public Core API
+ledger is synced to the official API index and the pinned Octane types, and a
+capability is marked covered only after its example or lifecycle test passes
+the release checks. Every row in that ledger is covered for `octane@0.1.37`.
 
 ## License
 

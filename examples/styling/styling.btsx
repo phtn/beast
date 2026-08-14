@@ -1,0 +1,19 @@
+module interface StylingProps { title: string; cardProps: Record<string, unknown> }
+props { title, cardProps }: StylingProps
+
+fragment
+  article.card({...cardProps})
+    h2 #{title}
+    p Scoped styling follows this component.
+  style
+    .card {
+      padding: 1rem;
+    }
+
+    .card h2 {
+      color: rebeccapurple;
+    }
+
+    :global(body) {
+      margin: 0;
+    }

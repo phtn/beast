@@ -14,11 +14,20 @@ export type AttrValue =
   | { type: "expr"; code: string }
   | { type: "bool" };
 
-export interface Attr {
+export interface NamedAttr {
+  kind: "attribute";
   name: string;
   value: AttrValue;
   span: SourceSpan;
 }
+
+export interface SpreadAttr {
+  kind: "spread";
+  code: string;
+  span: SourceSpan;
+}
+
+export type Attr = NamedAttr | SpreadAttr;
 
 export type TextSpan =
   | { type: "literal"; text: string }
@@ -80,6 +89,16 @@ export interface TextNode extends BaseNode {
   spans: TextSpan[];
 }
 
+export interface FragmentNode extends BaseNode {
+  kind: "fragment";
+  children: BeastNode[];
+}
+
+export interface StyleNode extends BaseNode {
+  kind: "style";
+  css: string;
+}
+
 export interface IfBranch {
   test: string | null;
   children: BeastNode[];
@@ -131,7 +150,15 @@ export interface TryNode extends BaseNode {
   catchBranch: TryCatchBranch | null;
 }
 
-export type BeastNode = ElementNode | TextNode | IfNode | EachNode | SwitchNode | TryNode;
+export type BeastNode =
+  | ElementNode
+  | TextNode
+  | FragmentNode
+  | StyleNode
+  | IfNode
+  | EachNode
+  | SwitchNode
+  | TryNode;
 
 export interface BeastDocument {
   kind: "document";

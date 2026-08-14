@@ -6,11 +6,13 @@ import type {
   ComponentDeclaration,
   EachNode,
   ElementNode,
+  FragmentNode,
   IfBranch,
   IfNode,
   PropsDeclaration,
   SetupDeclaration,
   SourceSpan,
+  StyleNode,
   SwitchBranch,
   SwitchNode,
   TextSpan,
@@ -342,6 +344,8 @@ class Parser {
     if (line.content === "try" || line.content.startsWith("try ")) {
       return this.parseTry(line);
     }
+    if (line.content === "fragment") return this.parseFragment(line);
+    if (line.content === "style") return this.parseStyle(line);
     if (line.content === "empty") {
       this.fail(
         "BEAST1407_ORPHAN_EMPTY",
@@ -384,6 +388,38 @@ class Parser {
       };
     }
     return this.parseElement(line);
+  }
+
+  private parseFragment(line: LogicalLine): FragmentNode {
+    this.index += 1;
+    const children = this.parseChildren(line.indent);
+    if (children.length === 0) {
+      this.fail(
+        "BEAST1901_EMPTY_FRAGMENT",
+        "An explicit fragment requires at least one indented template node.",
+        line,
+      );
+    }
+    return {
+      kind: "fragment",
+      children,
+      lineNo: line.lineNo,
+      span: lineSpan(line),
+    };
+  }
+
+  private parseStyle(line: LogicalLine): StyleNode {
+    const css = this.parseSourceBlock(
+      line,
+      "BEAST1902_EMPTY_STYLE",
+      "A style block requires indented CSS source.",
+    );
+    return {
+      kind: "style",
+      css,
+      lineNo: line.lineNo,
+      span: lineSpan(line),
+    };
   }
 
   private parseIf(line: LogicalLine): IfNode {
@@ -930,6 +966,30 @@ function parseAttributes(
     while (cursor < input.length && /[\s,]/u.test(input[cursor] ?? "")) cursor += 1;
     if (cursor >= input.length) break;
     const start = cursor;
+    if (input[cursor] === "{") {
+      const close = findMatchingDelimiter(input, cursor);
+      if (close === -1) attributeFailure("Unclosed spread attribute.", line, filename, start);
+      const spread = input.slice(cursor + 1, close).trim();
+      if (!spread.startsWith("...")) {
+        attributeFailure(
+          "A braced attribute must begin with `...` to spread an expression.",
+          line,
+          filename,
+          start,
+        );
+      }
+      const code = spread.slice(3).trim();
+      if (code.length === 0) {
+        attributeFailure("A spread attribute requires an expression.", line, filename, start);
+      }
+      cursor = close + 1;
+      attrs.push({
+        kind: "spread",
+        code,
+        span: attributeSpan(line, columnOffset + start, columnOffset + cursor),
+      });
+      continue;
+    }
     const nameMatch = input.slice(cursor).match(/^[A-Za-z_$][A-Za-z0-9_$:-]*/u);
     if (nameMatch === null) attributeFailure("Expected an attribute name.", line, filename);
     const name = nameMatch[0];
@@ -938,6 +998,7 @@ function parseAttributes(
 
     if (input[cursor] !== "=") {
       attrs.push({
+        kind: "attribute",
         name,
         value: { type: "bool" },
         span: attributeSpan(line, columnOffset + start, columnOffset + cursor),
@@ -970,6 +1031,7 @@ function parseAttributes(
       }
       if (!closed) attributeFailure(`Unclosed string value for attribute \`${name}\`.`, line, filename);
       attrs.push({
+        kind: "attribute",
         name,
         value: { type: "string", value },
         span: attributeSpan(line, columnOffset + start, columnOffset + cursor),
@@ -984,6 +1046,7 @@ function parseAttributes(
       if (code.length === 0) attributeFailure(`Attribute \`${name}\` has an empty expression.`, line, filename);
       cursor = close + 1;
       attrs.push({
+        kind: "attribute",
         name,
         value: { type: "expr", code },
         span: attributeSpan(line, columnOffset + start, columnOffset + cursor),
@@ -1118,10 +1181,12 @@ function extractSingleRootKey(
 ): string | null {
   if (children.length !== 1 || children[0]?.kind !== "element") return null;
   const element = children[0];
-  const keyIndex = element.attrs.findIndex((attr) => attr.name === "key");
+  const keyIndex = element.attrs.findIndex(
+    (attr) => attr.kind === "attribute" && attr.name === "key",
+  );
   if (keyIndex === -1) return null;
   const key = element.attrs[keyIndex];
-  if (key === undefined || key.value.type === "bool") {
+  if (key === undefined || key.kind !== "attribute" || key.value.type === "bool") {
     throw new BeastCompileError({
       code: "BEAST1406_INVALID_KEY",
       severity: "error",
