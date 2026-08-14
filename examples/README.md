@@ -12,6 +12,7 @@ goldens are also included in the published `beast-tsrx` package.
 | --- | --- |
 | [`actions`](actions/actions.btsx) | A tagless local submit component, form action state, descendant status, optimistic output, and deferred reset |
 | [`app`](app/app.btsx) | Source imports, typed props, component composition, IDs, and dynamic classes |
+| [`async`](async/async.btsx) | Promise-valued `use()` under Suspense/ErrorBoundary plus visible, hidden, and prerender Activity modes |
 | [`boundary`](boundary/boundary.btsx) | Async `try`, `pending`, and bound `catch` output |
 | [`card`](card/card.btsx) | Nested elements, interpolation, conditions, and a hoisted loop key |
 | [`catalog`](catalog/catalog.btsx) | Attributes, explicit loop keys, and an `empty` fallback |
@@ -20,6 +21,7 @@ goldens are also included in the published `beast-tsrx` package.
 | [`editor`](editor/editor.btsx) | Strong-mode `useLinkedState`, controlled text input, native `onInput`, and form submission |
 | [`fragment`](fragment/fragment.btsx) | Multiple roots, text-only lines, comments, escaping, and interpolation |
 | [`hooks`](hooks/hooks.btsx) | Initialized reducer/getter, effect phases/events, IDs, imperative handles, memo/callback, and debug labels |
+| [`hydration`](hydration/hydration.btsx) | Every hydration strategy, complete `Hydrate` props, child extraction, permanent-static output, and early capture |
 | [`network`](network/network.btsx) | Stable browser subscription and deterministic SSR with `useSyncExternalStore` |
 | [`portal`](portal/portal.btsx) | `createPortal` with a tagless local body, wrapper props, and logical event ancestry |
 | [`provider`](provider/provider.btsx) | Tagless local components, module-scoped Context, dotted provider, and `use()`/`useContext()` consumers |

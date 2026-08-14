@@ -37,7 +37,8 @@ through `import`, `setup`, attributes, and nesting unchanged.
 | Empty lists | An aligned `empty` branch emits native `@empty` | `catalog` golden |
 | Multi-way branches | `switch`, `case`, and `default` emit native `@switch` arms | `variant` golden |
 | Async/error boundaries | `try`, `pending`, and bound `catch` emit native boundary arms | `boundary` golden |
-| Runtime boundary components | `lazy` composes under `Suspense` and `ErrorBoundary`; visibility-triggered `Hydrate` defers interactivity with eager child code | `deferred` golden |
+| Runtime boundary components | `lazy` composes under `Suspense` and `ErrorBoundary`; Promise reads prove fulfilled, pending, and rejected server paths; `Activity` covers visible/hidden/prerender output | `deferred`, `async` goldens and async SSR assertions |
+| Deferred hydration | Every activation strategy, dynamic selection, strategy/procedural prefetch, fallback/completion props, default child extraction, permanent-static ranges, server markers, and idempotent early event capture | `hydration` golden, extracted-child compile, SSR assertions, and capture test |
 | Fragments and text holes | Explicit and automatic output fragments, text-only lines, escaping, and interpolation | `fragment`, `styling` goldens |
 | Context | Module-scoped `createContext`, dotted `Theme.Provider`, and local `use()`/`useContext()` consumers | `provider` golden |
 | Client bundling | Mixed BTSX/TSRX Vite application production build | project integration test |
@@ -61,17 +62,17 @@ exports are outside this user-facing scope.
 | State | `useReducer` | Covered | `hooks` initialized reducer, latest-state getter lowering, and SSR assertion |
 | State | `useLinkedState` | Covered | `editor` golden |
 | Context | `createContext`, `use(context)`, `useContext` | Covered | `provider` golden |
-| Async data | `use(Promise)` | Planned | Suspense success/fallback server assertions |
+| Async data | `use(Promise)` | Covered | `async` fulfilled, Suspense-pending, and ErrorBoundary-rejected SSR assertions |
 | External state | `useSyncExternalStore` | Covered | `network` golden and SSR assertion |
 | Refs/effects | `useRef`, `useEffect` | Covered | `refs`, `shortcut`, and `counter` goldens |
 | Refs/effects | `useLayoutEffect`, `useInsertionEffect`, `useEffectEvent` | Covered | `hooks` client lowering and server no-effect assertion |
 | Refs/effects | `useId`, `useImperativeHandle` | Covered | `hooks` linked SSR ID and server-inert handle assertion |
 | Loading | `Suspense`, `ErrorBoundary`, `lazy` | Covered | `deferred` golden and client/server compilation |
 | Loading | `startTransition`, `useTransition`, `useDeferredValue` | Covered | `responsive` and `transitions` goldens with SSR |
-| Loading | `Activity` | Planned | Visible/hidden/prerender compilation and SSR fixture |
-| Hydration | `Hydrate` | Partial | `deferred` covers `visible`, `fallback`, and `split={false}` |
-| Hydration | `load`, `idle`, `visible`, `media`, `interaction`, `condition`, `never` | Partial | `visible` covered; remaining strategies planned |
-| Hydration | `initializeHydrationEventCapture` | Planned | Client lifecycle fixture |
+| Loading | `Activity` | Covered | `async` visible/hidden/prerender client lowering and SSR assertions |
+| Hydration | `Hydrate` | Covered | `hydration` complete prop surface, default extracted child, and permanent-static lowering |
+| Hydration | `load`, `idle`, `visible`, `media`, `interaction`, `condition`, `never` | Covered | `hydration` client compile and server marker assertions for every strategy plus dynamic factory |
+| Hydration | `initializeHydrationEventCapture` | Covered | Per-document capture listener idempotence test |
 | Actions | `useActionState`, `useFormStatus`, `useOptimistic`, `requestFormReset` | Covered | `actions` golden and SSR assertion |
 | Composition | `Fragment` | Covered | Automatic output in `fragment` and explicit source fragment in `styling` |
 | Composition | `memo`, `useCallback` | Covered | `hooks` memoized local summary and stable dispatch callback |
@@ -102,35 +103,25 @@ passes the repository's release checks.
 
 ## Next additions
 
-### 1. Complete async and visibility APIs
-
-Add focused fixtures for promise-valued `use()` and every `Activity` mode, then
-compose both with Suspense and hydration where their visible server behavior
-can be asserted.
-
-### 2. Complete deferred-hydration coverage
-
-Exercise every hydration strategy, the complete `Hydrate` prop surface,
-permanently static ranges, and early interaction capture. Then add a full
-server-render and client-hydration fixture, including compiler-split children.
-
-### 3. Cover library and resource helpers
+### 1. Cover library and resource helpers
 
 Exercise descriptors, Children inspection, resource hints, view-transition
 pseudo-elements, and the public package version with direct assertions for
 every export.
 
-### 4. Close client ownership and rendering gaps
+### 2. Close client ownership and rendering gaps
 
 Cover `createRoot`, `hydrateRoot`, `flushSync`, `act`, portals, and behavior-only
 roots in executable DOM lifecycle tests rather than compilation-only examples.
+Include adoption and activation of server-rendered deferred boundaries so the
+already-covered Hydrate compiler surface is also proven end to end.
 
-### 5. Complete server and static rendering
+### 3. Complete server and static rendering
 
 Exercise buffered, Node-stream, Web-stream, await-everything, static, and
 Suspense-timeout entry points against Beast-compiled components.
 
-### 6. Close application-integration gaps
+### 4. Close application-integration gaps
 
 The Vite path has client production coverage, but still needs full lifecycle
 fixtures for server transforms, rendering, hydration, and compiler-split
@@ -139,7 +130,7 @@ After that, add Beast adapters or documented precompile workflows for Octane's
 Rspack and Rsbuild integrations. Framework-specific adapters should follow
 only when the core bundler contracts are stable.
 
-### 7. Improve compiler tooling
+### 5. Improve compiler tooling
 
 Add Beast-to-TSRX source maps and a standalone watch mode. These are not Octane
 runtime capabilities, but they are required for complete diagnostics and a
@@ -149,12 +140,11 @@ non-Vite development workflow.
 
 The smallest dependency-aware sequence is:
 
-1. Promise `use()`, Activity, and complete deferred hydration.
-2. Resources, descriptors, inspection helpers, view-transition pseudo-elements,
+1. Resources, descriptors, inspection helpers, view-transition pseudo-elements,
    and package metadata.
-3. Client ownership, roots, and behavior-only roots.
-4. Server/static rendering APIs.
-5. Rspack/Rsbuild support, source maps, and standalone watch mode.
+2. Client ownership, roots, deferred activation, and behavior-only roots.
+3. Server/static rendering APIs.
+4. Rspack/Rsbuild support, source maps, and standalone watch mode.
 
 [Quick start]: https://octanejs.dev/docs
 [Core APIs]: https://octanejs.dev/docs/core-apis

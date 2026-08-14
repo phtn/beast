@@ -633,6 +633,28 @@ optional pair of parentheses. Their TypeScript binding syntax is preserved for
 Octane to validate. Every authored boundary arm must contain at least one
 template node.
 
+Promise-valued `use()` is an ordinary setup call. Pending reads reach the
+nearest `Suspense`, rejected reads reach `ErrorBoundary`, and fulfilled reads
+continue into the component body:
+
+```btsx
+import { ErrorBoundary, Suspense, use } from "octane";
+
+component AsyncProfile
+  props { profile }: { profile: PromiseLike<ProfileData> }
+  setup const resolved = use(profile);
+  h2 #{resolved.name}
+
+ErrorBoundary(fallback="Profile failed.")
+  Suspense(fallback="Loading profile…")
+    AsyncProfile(profile={profile})
+```
+
+The [async golden](examples/async/async.btsx) executes all three server
+outcomes. It also covers `Activity` in `visible`, `hidden`, and `prerender`
+modes; hidden content is omitted from server output while the other two modes
+render their subtree.
+
 Octane's component boundaries and hydration strategies compose through normal
 imports, attributes, and nesting. A lazy component suspends into the nearest
 `Suspense`; a rejected load reaches the nearest `ErrorBoundary`. `Hydrate`
@@ -651,9 +673,21 @@ ErrorBoundary(fallback="The dashboard could not be loaded.")
 ```
 
 This focused form opts out of Hydrate's child-chunk extraction while still
-deferring interactivity. Compiler-split Hydrate boundaries belong in a full
-SSR/hydration bundler lifecycle. See the complete
+deferring interactivity. See the complete
 [deferred golden](examples/deferred/deferred.btsx).
+
+The [hydration golden](examples/hydration/hydration.btsx) covers `load`, `idle`,
+`visible`, `media`, `interaction`, `condition`, and `never`, including the
+function form for browser-only strategy selection. It also exercises default
+child splitting, strategy and procedural prefetching, `fallback`,
+`onHydrated`, and the permanent-static `split={false}` plus `when={never()}`
+form. Its conformance test compiles the extracted child query and executes the
+server markers for every strategy.
+
+Applications that may receive input before `hydrateRoot()` should call
+`initializeHydrationEventCapture()` from their lightweight bootstrap. The API
+is idempotent per document; Beast's test invokes it twice and verifies each
+supported capture listener is installed only once.
 
 ### Comments and roots
 
@@ -890,6 +924,7 @@ beast/
 │   ├── README.md                # Example index and usage notes
 │   ├── actions/                 # Form actions, optimistic state, and reset
 │   ├── app/                     # Imports and component composition
+│   ├── async/                   # Promise use, Suspense outcomes, and Activity
 │   ├── boundary/                # Loading and error template boundaries
 │   ├── card/                    # Conditions and a hoisted loop key
 │   ├── catalog/                 # Attributes and an explicit loop key
@@ -898,6 +933,7 @@ beast/
 │   ├── editor/                  # Linked controlled input and native events
 │   ├── fragment/                # Multiple roots, text, and escaping
 │   ├── hooks/                   # Reducer, effect phases, IDs, memo, and handles
+│   ├── hydration/               # Strategies, prefetch, splitting, and capture
 │   ├── network/                 # External-store subscription and SSR snapshot
 │   ├── portal/                  # Cross-container rendering and logical ancestry
 │   ├── provider/                # Context provider and consumer hooks

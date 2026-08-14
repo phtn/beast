@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { compile } from "octane/compiler";
+import { initializeHydrationEventCapture } from "octane/hydration";
 import { renderToString } from "octane/server";
 import {
   BeastCompileError,
@@ -27,10 +28,13 @@ async function renderCompiledServer(code: string, props?: unknown): Promise<stri
 }
 
 async function renderCompiledServerResult(code: string, props?: unknown) {
-  const executable = code.replace(
-    "'octane/server'",
-    JSON.stringify(import.meta.resolve("octane/server")),
-  );
+  let executable = code;
+  for (const specifier of ["octane/server", "octane/hydration"]) {
+    const resolved = JSON.stringify(import.meta.resolve(specifier));
+    executable = executable
+      .replaceAll(JSON.stringify(specifier), resolved)
+      .replaceAll(`'${specifier}'`, resolved);
+  }
   if (executable === code) throw new Error("Expected an Octane server runtime import.");
 
   const temporaryDirectory = await mkdtemp(resolve(tmpdir(), "beast-server-test-"));
@@ -225,6 +229,152 @@ describe("BTSX to TSRX", () => {
     expect(phases).toEqual([]);
     expect(reports).toEqual([]);
     expect(handleRef.current).toBeNull();
+  });
+
+  test("renders Promise use outcomes and every Activity mode", async () => {
+    const filename = resolve("examples/async/async.btsx");
+    const source = await readFile(filename, "utf8");
+    const result = compileBeastResult(source, { filename });
+    const tsrxFilename = filename.replace(/\.btsx$/u, ".tsrx");
+
+    const client = compile(result.code, tsrxFilename, {
+      mode: "client",
+      hmr: false,
+      dev: true,
+    });
+    expect(client.diagnostics).toHaveLength(0);
+    expect(client.code).toContain("activityBlock");
+    expect(client.code).toContain('"visible", __activity');
+    expect(client.code).toContain('"hidden", __activity');
+    expect(client.code).toContain('"prerender", __activity');
+    expect(client.code).toContain("const resolved = use(");
+
+    const server = compile(result.code, tsrxFilename, {
+      mode: "server",
+      hmr: false,
+      dev: true,
+    });
+    expect(server.diagnostics).toHaveLength(0);
+
+    const fulfilled = await renderCompiledServerResult(server.code, {
+      profile: {
+        status: "fulfilled",
+        value: { name: "Ada", role: "Engineer" },
+        then() {},
+      },
+    });
+    expect(fulfilled.html).toContain('<article class="profile"><h2>Ada</h2>');
+    expect(fulfilled.html).toContain("<p>Engineer</p>");
+    expect(fulfilled.html).toContain("<p>Visible activity</p>");
+    expect(fulfilled.html).not.toContain("Hidden activity");
+    expect(fulfilled.html).toContain("<p>Prerendered activity</p>");
+
+    const pending = await renderCompiledServerResult(server.code, {
+      profile: { status: "pending", then() {} },
+    });
+    expect(pending.html).toContain("Loading profile…");
+    expect(pending.html).not.toContain('<article class="profile">');
+
+    const rejected = await renderCompiledServerResult(server.code, {
+      profile: { status: "rejected", reason: new Error("Unavailable"), then() {} },
+    });
+    expect(rejected.html).toContain("Profile failed.");
+    expect(rejected.html).toContain('"message":"Unavailable"');
+  });
+
+  test("covers every hydration strategy and the complete Hydrate prop surface", async () => {
+    const filename = resolve("examples/hydration/hydration.btsx");
+    const source = await readFile(filename, "utf8");
+    const result = compileBeastResult(source, { filename });
+
+    for (const call of [
+      "load()",
+      "idle({ timeout: 1000 })",
+      'visible({ rootMargin: "300px", threshold: [0, 0.5] })',
+      'media("(min-width: 64rem)")',
+      'interaction({ events: ["focusin", "click"] })',
+      "condition(enabled)",
+      "never()",
+    ]) {
+      expect(result.code).toContain(call);
+    }
+    expect(result.code).toContain("prefetch={prefetchPanel}");
+    expect(result.code).toContain('fallback="Preparing editor…"');
+    expect(result.code).toContain("onHydrated={onHydrated}");
+
+    const tsrxFilename = filename.replace(/\.btsx$/u, ".tsrx");
+    const client = compile(result.code, tsrxFilename, {
+      mode: "client",
+      hmr: false,
+      dev: true,
+    });
+    expect(client.diagnostics).toHaveLength(0);
+    expect(client.code).toContain("Hydrate.__octanePermanentStatic");
+    expect(client.code).toContain('?octane-hydrate=8"');
+    expect(client.code).toContain("'prefetch': prefetchPanel");
+
+    const splitChild = compile(result.code, `${tsrxFilename}?octane-hydrate=8`, {
+      mode: "client",
+      hmr: false,
+      dev: true,
+    });
+    expect(splitChild.diagnostics).toHaveLength(0);
+    expect(splitChild.code).toContain("__OctaneHydrateBoundary_8");
+    expect(splitChild.code).toContain("Split and prefetched");
+
+    const server = compile(result.code, tsrxFilename, {
+      mode: "server",
+      hmr: false,
+      dev: true,
+    });
+    expect(server.diagnostics).toHaveLength(0);
+    const hydrated: string[] = [];
+    const warmed: AbortSignal[] = [];
+    const rendered = await renderCompiledServerResult(server.code, {
+      enabled: true,
+      onHydrated: () => hydrated.push("done"),
+      warm: async (signal: AbortSignal) => {
+        warmed.push(signal);
+      },
+    });
+
+    for (const strategy of [
+      "load",
+      "idle",
+      "visible",
+      "media",
+      "interaction",
+      "condition",
+      "dynamic",
+    ]) {
+      expect(rendered.html).toContain(`data-octane-hydrate-when="${strategy}"`);
+    }
+    expect(rendered.html).toContain(
+      'data-octane-hydrate-interaction-events="focusin click"',
+    );
+    expect(rendered.html).toContain("<!--octane-static-hydrate:0-->");
+    expect(rendered.html).toContain("<h2>Never</h2>");
+    expect(rendered.html).toContain("<h2>Procedural prefetch</h2>");
+    expect(hydrated).toEqual([]);
+    expect(warmed).toEqual([]);
+  });
+
+  test("installs early hydration event capture once per document", () => {
+    const registrations: Array<{ type: string; capture: boolean }> = [];
+    const ownerDocument = {
+      addEventListener(type: string, _listener: EventListener, capture: boolean) {
+        registrations.push({ type, capture });
+      },
+    } as unknown as Document;
+
+    initializeHydrationEventCapture(ownerDocument);
+    const firstCount = registrations.length;
+    initializeHydrationEventCapture(ownerDocument);
+
+    expect(firstCount).toBeGreaterThan(0);
+    expect(registrations).toHaveLength(firstCount);
+    expect(new Set(registrations.map(({ type }) => type)).size).toBe(firstCount);
+    expect(registrations.every(({ capture }) => capture)).toBe(true);
   });
 
   test("emits Octane empty branches for loops", () => {
