@@ -352,6 +352,59 @@ SearchResults(query={deferredQuery})
 than imposing a fixed delay. See the complete
 [responsive golden](examples/responsive/responsive.btsx).
 
+View transitions wrap the DOM region whose visual state should animate. Start
+the update as a transition, and use `addTransitionType` when one boundary needs
+different classes for different navigation directions:
+
+```btsx
+import { ViewTransition, addTransitionType, startTransition, useState } from "octane";
+module type Tab = "overview" | "activity";
+setup const [tab, setTab] = useState<Tab>("overview");
+setup
+  const selectTab = (next: Tab) => {
+    startTransition(() => {
+      addTransitionType(next === "activity" ? "forward" : "backward");
+      setTab(next);
+    });
+  };
+
+button(onClick={() => selectTab("activity")}) Activity
+ViewTransition(name="project-panel" update={{ default: "panel-update", forward: "slide-left", backward: "slide-right" }})
+  article #{tab === "overview" ? "Overview" : "Activity"}
+```
+
+Beast preserves the boundary, callbacks, and class maps as native Octane
+component props. The complete
+[transitions golden](examples/transitions/transitions.btsx) also covers enter
+and exit classes, typed navigation state, Octane's client preload hint, and
+server transition annotations.
+
+Portals use a normal module helper that returns `createPortal`. A tagless local
+component can be passed as the portal body, so BTSX does not need to embed a
+TSRX fragment inside the call:
+
+```btsx
+import { createPortal } from "octane";
+module
+  interface SavedToastProps { target: HTMLElement; onDismiss: () => void }
+  function SavedToast({ target, onDismiss }: SavedToastProps) {
+    return createPortal(ToastBody, target, { onDismiss });
+  }
+
+component ToastBody
+  props { onDismiss }: { onDismiss: () => void }
+  aside.toast
+    p(role="status") Draft saved.
+    button(type="button" onClick={onDismiss}) Dismiss
+props { target, onDismiss }: SavedToastProps
+
+SavedToast(target={target} onDismiss={onDismiss})
+```
+
+The optional third argument supplies props to the portal body. The complete
+[portal golden](examples/portal/portal.btsx) keeps the physical overlay under
+its logical Beast parent so Octane can preserve context and event ancestry.
+
 Form actions can combine action-owned state, descendant status, optimistic
 output, and an uncontrolled-field reset. The optimistic update belongs inside
 the action, while `useFormStatus` belongs in a component rendered beneath the
@@ -781,11 +834,13 @@ beast/
 │   ├── editor/                  # Linked controlled input and native events
 │   ├── fragment/                # Multiple roots, text, and escaping
 │   ├── network/                 # External-store subscription and SSR snapshot
+│   ├── portal/                  # Cross-container rendering and logical ancestry
 │   ├── provider/                # Context provider and consumer hooks
 │   ├── refs/                    # Callback, object, and array refs
 │   ├── responsive/              # Transitions and deferred search output
 │   ├── shortcut/                # Multiline source and effect cleanup
 │   ├── status/                  # Nested loops and branch chains
+│   ├── transitions/             # View-transition classes and typed directions
 │   └── variant/                 # Multi-way switch output
 ├── docs/
 │   └── octane-coverage.md       # Official-doc coverage map and roadmap

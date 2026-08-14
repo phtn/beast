@@ -20,11 +20,13 @@ goldens are also included in the published `beast-tsrx` package.
 | [`editor`](editor/editor.btsx) | Strong-mode `useLinkedState`, controlled text input, native `onInput`, and form submission |
 | [`fragment`](fragment/fragment.btsx) | Multiple roots, text-only lines, comments, escaping, and interpolation |
 | [`network`](network/network.btsx) | Stable browser subscription and deterministic SSR with `useSyncExternalStore` |
+| [`portal`](portal/portal.btsx) | `createPortal` with a tagless local body, wrapper props, and logical event ancestry |
 | [`provider`](provider/provider.btsx) | Tagless local components, module-scoped Context, dotted provider, and `use()`/`useContext()` consumers |
 | [`refs`](refs/refs.btsx) | An object ref plus callback ref array and callback cleanup |
 | [`responsive`](responsive/responsive.btsx) | Non-urgent tab updates with `useTransition` and immediate search with `useDeferredValue` |
 | [`shortcut`](shortcut/shortcut.btsx) | Multiline module/setup source, Strong mode, `useRef`, and effect cleanup |
 | [`status`](status/status.btsx) | Nested loops plus `elseif` and `else` branches |
+| [`transitions`](transitions/transitions.btsx) | `ViewTransition`, directional type classes, transition updates, and SSR annotations |
 | [`variant`](variant/variant.btsx) | Multi-way `switch`, `case`, and `default` output |
 
 Compile one example directly:

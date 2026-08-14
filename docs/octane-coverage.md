@@ -27,6 +27,8 @@ through `import`, `setup`, attributes, and nesting unchanged.
 | Linked controlled state | Strong-mode `useLinkedState` reconciles editable state by source identity | `editor` golden |
 | External stores | Stable subscription/client snapshot functions and a deterministic server snapshot pass through `useSyncExternalStore` | `network` golden and SSR assertion |
 | Responsive updates | `useTransition` marks tab changes as non-urgent while `useDeferredValue` lets search results lag behind controlled input | `responsive` golden and SSR assertion |
+| View transitions | `ViewTransition` receives named enter/exit/update classes while `addTransitionType` selects a directional class map inside `startTransition` | `transitions` golden, client preload assertion, and SSR annotation assertion |
+| Portals | A module helper passes a tagless local component and its props through `createPortal` while preserving logical event ancestry | `portal` golden and SSR placeholder assertion |
 | Actions and forms | `useActionState` owns submission state, `useFormStatus` reads it below the form, `useOptimistic` stages a row, and `requestFormReset` resets after success | `actions` golden and SSR assertion |
 | Conditions | `if`, `elseif`, and `else` emit native `@if` arms | `card`, `status` goldens |
 | Keyed lists | Item/index bindings, explicit keys, and single-root key hoisting emit `@for` | `card`, `catalog`, `status` goldens |
@@ -44,23 +46,14 @@ do not yet have a focused Beast example or integration test.
 
 ## Next additions
 
-### 1. Expand runtime conformance examples
-
-These do not generally need new BTSX grammar:
-
-- View transitions and portals.
-
-Keep examples focused: one golden per distinct compiler shape, with Octane
-runtime tests only where compilation cannot prove the behavior.
-
-### 2. Complete element-level TSRX syntax
+### 1. Complete element-level TSRX syntax
 
 Add spread attributes, an explicit source fragment form, and raw/scoped style
 blocks. Spread attributes are especially useful for wrapper components and for
 covering Octane's development-time native text-event checks when final host
 props are dynamic.
 
-### 3. Close application-integration gaps
+### 2. Close application-integration gaps
 
 The Vite path has client production coverage, but still needs full lifecycle
 fixtures for server transforms, rendering, hydration, and compiler-split
@@ -69,7 +62,7 @@ After that, add Beast adapters or documented precompile workflows for Octane's
 Rspack and Rsbuild integrations. Framework-specific adapters should follow
 only when the core bundler contracts are stable.
 
-### 4. Improve compiler tooling
+### 3. Improve compiler tooling
 
 Add Beast-to-TSRX source maps and a standalone watch mode. These are not Octane
 runtime capabilities, but they are required for complete diagnostics and a
@@ -79,10 +72,9 @@ non-Vite development workflow.
 
 The smallest dependency-aware sequence is:
 
-1. View transitions and portals.
-2. Spread attributes, explicit fragments, and style blocks.
-3. Vite SSR/hydration integration fixtures, including compiler-split Hydrate.
-4. Rspack/Rsbuild support, source maps, and standalone watch mode.
+1. Spread attributes, explicit fragments, and style blocks.
+2. Vite SSR/hydration integration fixtures, including compiler-split Hydrate.
+3. Rspack/Rsbuild support, source maps, and standalone watch mode.
 
 [Quick start]: https://octanejs.dev/docs
 [Core APIs]: https://octanejs.dev/docs/core-apis

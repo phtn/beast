@@ -1,0 +1,29 @@
+import { createPortal } from "octane";
+module
+  interface ToastBodyProps {
+    onDismiss: () => void;
+  }
+
+  interface SavedToastProps extends ToastBodyProps {
+    target: HTMLElement;
+  }
+
+  interface PortalProps extends SavedToastProps {
+    onBubble: () => void;
+  }
+
+  function SavedToast({ target, onDismiss }: SavedToastProps) {
+    return createPortal(ToastBody, target, { onDismiss });
+  }
+
+component ToastBody
+  props { onDismiss }: ToastBodyProps
+  aside.toast(aria-label="Save notification")
+    p(role="status") Draft saved.
+    button(type="button" onClick={onDismiss}) Dismiss
+props { target, onDismiss, onBubble }: PortalProps
+
+section.editor(onClick={onBubble})
+  h2 Draft editor
+  p Portal clicks still follow their logical Beast parent.
+  SavedToast(target={target} onDismiss={onDismiss})

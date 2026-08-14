@@ -577,6 +577,90 @@ describe("BTSX to TSRX", () => {
     expect(rendered).toContain("<p>Showing results for all products</p>");
   });
 
+  test("compiles and server-renders view-transition boundaries", async () => {
+    const filename = resolve("examples/transitions/transitions.btsx");
+    const source = await readFile(filename, "utf8");
+    const result = compileBeastResult(source, { filename });
+
+    expect(result.code).toContain(
+      'addTransitionType(next === "activity" ? "forward" : "backward")',
+    );
+    expect(result.code).toContain(
+      '<ViewTransition name="project-panel" enter="panel-enter" exit="panel-exit"',
+    );
+    expect(result.code).toContain(
+      'update={{ default: "panel-update", forward: "slide-left", backward: "slide-right" }}',
+    );
+
+    const tsrxFilename = filename.replace(/\.btsx$/u, ".tsrx");
+    const client = compile(result.code, tsrxFilename, {
+      mode: "client",
+      hmr: false,
+      dev: true,
+    });
+    expect(client.diagnostics).toHaveLength(0);
+    expect(client.code).toContain("_$__vtSeen();");
+    expect(client.code).toContain("addTransitionType(next === \"activity\"");
+    expect(client.code).toContain("ViewTransition,");
+
+    const server = compile(result.code, tsrxFilename, {
+      mode: "server",
+      hmr: false,
+      dev: true,
+    });
+    expect(server.diagnostics).toHaveLength(0);
+    const rendered = await renderCompiledServer(server.code);
+
+    expect(rendered).toContain(
+      '<article class="project-panel" vt-name="project-panel" vt-update="panel-update" vt-share="auto">',
+    );
+    expect(rendered).toContain("<h3>Overview</h3>");
+    expect(rendered).toContain("<p>Overview is ready.</p>");
+  });
+
+  test("compiles portal descriptors and preserves their server placeholder", async () => {
+    const filename = resolve("examples/portal/portal.btsx");
+    const source = await readFile(filename, "utf8");
+    const result = compileBeastResult(source, { filename });
+
+    expect(result.code).toContain(
+      "return createPortal(ToastBody, target, { onDismiss });",
+    );
+    expect(result.code).toContain('<section className="editor" onClick={onBubble}>');
+    expect(result.code).toContain(
+      '<SavedToast target={target} onDismiss={onDismiss} />',
+    );
+
+    const tsrxFilename = filename.replace(/\.btsx$/u, ".tsrx");
+    const client = compile(result.code, tsrxFilename, {
+      mode: "client",
+      hmr: false,
+      dev: true,
+    });
+    expect(client.diagnostics).toHaveLength(0);
+    expect(client.code).toContain(
+      "return createPortal(ToastBody, target, { onDismiss });",
+    );
+    expect(client.code).toContain("SavedToast, { 'target': target");
+
+    const server = compile(result.code, tsrxFilename, {
+      mode: "server",
+      hmr: false,
+      dev: true,
+    });
+    expect(server.diagnostics).toHaveLength(0);
+    const rendered = await renderCompiledServer(server.code, {
+      target: {},
+      onDismiss: () => {},
+      onBubble: () => {},
+    });
+
+    expect(rendered).toContain('<section class="editor">');
+    expect(rendered).toContain("Portal clicks still follow their logical Beast parent.");
+    expect(rendered).toContain("<!---->");
+    expect(rendered).not.toContain("Draft saved.");
+  });
+
   test("compiles and server-renders action and form hooks", async () => {
     const filename = resolve("examples/actions/actions.btsx");
     const source = await readFile(filename, "utf8");
