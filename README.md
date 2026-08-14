@@ -740,6 +740,28 @@ elements, delegate events, and honor independently owned ranges while leaving
 their DOM intact on normal disposal. This is an application-bootstrap API; it
 does not require additional BTSX grammar.
 
+### Server and static rendering
+
+Server entry points consume the same component produced from BTSX; no separate
+authoring syntax is required. Choose the renderer by delivery goal:
+
+| Goal | Entry point |
+| --- | --- |
+| One synchronous hydratable pass | `renderToString` from `octane/server` |
+| Marker-free HTML that will not hydrate | `renderToStaticMarkup` from `octane/server` |
+| Progressive Node response | `renderToPipeableStream` from `octane/server` |
+| Progressive Web `ReadableStream` | `renderToReadableStream` from `octane/server` |
+| Fully resolved buffered output | `prerender` from `octane/static` |
+| Fully resolved Node prelude | `prerenderToNodeStream` from `octane/static` |
+
+Buffered renderers return separate `html` and deduplicated scoped `css`
+channels. Head elements fold into `html` by default or can be requested through
+the separate head channel. Streaming renders send a Suspense shell first and
+reveal completed boundaries later; the Web form exposes `allReady` for final
+completion. The renderer suite also verifies CSP nonces, request aborts,
+per-render deadlines, and the global `setSsrSuspenseTimeout()` /
+`getSsrSuspenseTimeout()` controls.
+
 ### Comments and roots
 
 Lines beginning with `//` are omitted from output. A component with multiple
@@ -946,6 +968,8 @@ The current suite and release checks verify the behavior Beast claims publicly:
   deferred boundaries, preserve portal event ancestry, and dispose owned work.
 - Behavior-only roots must honor external ownership and retain existing DOM on
   disposal.
+- Server renderers must preserve hydratable/static distinctions, stream
+  Suspense completion through Node and Web transports, and bound async work.
 - Recursive builds must mirror paths, emit a versioned manifest, and safely
   remove only stale outputs tracked by the previous manifest.
 - Mixed `.btsx` and native `.tsrx` applications must complete a production
@@ -1005,7 +1029,8 @@ beast/
 ├── tests/
 │   ├── compiler.test.ts         # Compiler and Octane conformance tests
 │   ├── project.test.ts          # Project builder and Vite tests
-│   └── runtime.test.ts          # Client hydration, roots, portals, and behavior
+│   ├── runtime.test.ts          # Client hydration, roots, portals, and behavior
+│   └── server.test.ts           # Buffered, streaming, and static rendering
 ├── package.json                 # `beast-tsrx` package and workspace root
 └── tsconfig.json
 ```

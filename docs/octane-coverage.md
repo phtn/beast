@@ -43,6 +43,7 @@ through `import`, `setup`, attributes, and nesting unchanged.
 | Fragments and text holes | Explicit and automatic output fragments, text-only lines, escaping, and interpolation | `fragment`, `styling` goldens |
 | Context | Module-scoped `createContext`, dotted `Theme.Provider`, and local `use()`/`useContext()` consumers | `provider` golden |
 | Client ownership | Root mount/update/unmount, server-DOM adoption, dormant-boundary activation and event replay, synchronous/test scheduling, cross-container portals, and non-reconciling behavior ownership | Executable Happy DOM lifecycle suite |
+| Server and static rendering | Hydratable/static buffered output, scoped CSS/head channels, Node and Web progressive streams, await-everything output, aborts, deadlines, and complete Node preludes | Executable renderer lifecycle suite |
 | Client bundling | Mixed BTSX/TSRX Vite application production build | project integration test |
 
 Every golden output is compared byte for byte and compiled with the pinned
@@ -58,7 +59,7 @@ on that page, and the public rendering functions from `octane/server` and
 helpers, metaframework RPC internals, compatibility aliases, and type-only
 exports are outside this user-facing scope.
 
-| Area | API | Status | Current proof or next fixture |
+| Area | API | Status | Proof |
 | --- | --- | --- | --- |
 | State | `useState` | Covered | `counter`, `responsive`, and `transitions` goldens |
 | State | `useReducer` | Covered | `hooks` initialized reducer, latest-state getter lowering, and SSR assertion |
@@ -92,25 +93,19 @@ exports are outside this user-facing scope.
 | Scheduling/testing | `flushSync`, `act` | Covered | Synchronous DOM commit plus render/effect settling in the client lifecycle suite |
 | Debugging | `useDebugValue` | Covered | `hooks` client/server lowering assertion |
 | Package | `version` | Covered | Runtime export equals Beast's pinned Octane dependency |
-| Server | `renderToString` | Covered | Multiple executable server assertions |
-| Server | `renderToStaticMarkup` | Planned | Buffered renderer parity fixture |
-| Server | `renderToPipeableStream`, `renderToReadableStream` | Planned | Node and Web stream assertions |
-| Server | `setSsrSuspenseTimeout`, `getSsrSuspenseTimeout` | Planned | Scoped timeout configuration assertion |
-| Static | `prerender`, `prerenderToNodeStream` | Planned | Await-everything buffered and stream assertions |
+| Server | `renderToString` | Covered | Hydratable markers, suspense seeds, nonce, folded/separate head channels, and existing SSR assertions |
+| Server | `renderToStaticMarkup` | Covered | Marker-free static output plus scoped CSS channel and CSP nonce assertions |
+| Server | `renderToPipeableStream`, `renderToReadableStream` | Covered | Node `pipe`/callbacks and Web `allReady` assertions with progressive Suspense output |
+| Server | `setSsrSuspenseTimeout`, `getSsrSuspenseTimeout` | Covered | Global getter/setter, per-render override, timeout, and abort assertions |
+| Static | `prerender`, `prerenderToNodeStream` | Covered | Await-everything buffered result and complete Node prelude assertions |
 
-`Partial` means the API already passes through Beast, but the complete public
-shape described in the Core APIs guide is not yet proven. A row moves to
-`Covered` only after its committed example or lifecycle test is documented and
-passes the repository's release checks.
+Every public Core API row is now `Covered`. This means its committed example or
+lifecycle test is documented and passes the repository's release checks; it
+does not claim coverage for compiler-private helpers or metaframework internals.
 
 ## Next additions
 
-### 1. Complete server and static rendering
-
-Exercise buffered, Node-stream, Web-stream, await-everything, static, and
-Suspense-timeout entry points against Beast-compiled components.
-
-### 2. Close application-integration gaps
+### 1. Close application-integration gaps
 
 The Vite path has client production coverage, but still needs full lifecycle
 fixtures for server transforms, rendering, hydration, and compiler-split
@@ -119,7 +114,7 @@ After that, add Beast adapters or documented precompile workflows for Octane's
 Rspack and Rsbuild integrations. Framework-specific adapters should follow
 only when the core bundler contracts are stable.
 
-### 3. Improve compiler tooling
+### 2. Improve compiler tooling
 
 Add Beast-to-TSRX source maps and a standalone watch mode. These are not Octane
 runtime capabilities, but they are required for complete diagnostics and a
@@ -129,9 +124,8 @@ non-Vite development workflow.
 
 The smallest dependency-aware sequence is:
 
-1. Server/static rendering APIs.
-2. Rspack/Rsbuild integration and SSR/deferred-split application lifecycles.
-3. Source maps and standalone watch mode.
+1. Rspack/Rsbuild integration and SSR/deferred-split application lifecycles.
+2. Source maps and standalone watch mode.
 
 [Quick start]: https://octanejs.dev/docs
 [Core APIs]: https://octanejs.dev/docs/core-apis
