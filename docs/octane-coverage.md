@@ -44,6 +44,60 @@ Every golden output is compared byte for byte and compiled with the pinned
 Octane compiler. Runtime APIs not named above are generally *expressible* but
 do not yet have a focused Beast example or integration test.
 
+## Public Core API ledger
+
+This ledger is the completion contract for Beast's Core API conformance work.
+It follows Octane's official [Core APIs] index, the hydration strategies taught
+on that page, and the public rendering functions from `octane/server` and
+`octane/static` in the pinned `octane@0.1.37` types. Compiler-emitted runtime
+helpers, metaframework RPC internals, compatibility aliases, and type-only
+exports are outside this user-facing scope.
+
+| Area | API | Status | Current proof or next fixture |
+| --- | --- | --- | --- |
+| State | `useState` | Covered | `counter`, `responsive`, and `transitions` goldens |
+| State | `useReducer` | Planned | Reducer and latest-state getter fixture |
+| State | `useLinkedState` | Covered | `editor` golden |
+| Context | `createContext`, `use(context)`, `useContext` | Covered | `provider` golden |
+| Async data | `use(Promise)` | Planned | Suspense success/fallback server assertions |
+| External state | `useSyncExternalStore` | Covered | `network` golden and SSR assertion |
+| Refs/effects | `useRef`, `useEffect` | Covered | `refs`, `shortcut`, and `counter` goldens |
+| Refs/effects | `useLayoutEffect`, `useInsertionEffect`, `useEffectEvent` | Planned | Effect-phase conformance fixture |
+| Refs/effects | `useId`, `useImperativeHandle` | Planned | Accessible ID and custom ref handle fixture |
+| Loading | `Suspense`, `ErrorBoundary`, `lazy` | Covered | `deferred` golden and client/server compilation |
+| Loading | `startTransition`, `useTransition`, `useDeferredValue` | Covered | `responsive` and `transitions` goldens with SSR |
+| Loading | `Activity` | Planned | Visible/hidden/prerender compilation and SSR fixture |
+| Hydration | `Hydrate` | Partial | `deferred` covers `visible`, `fallback`, and `split={false}` |
+| Hydration | `load`, `idle`, `visible`, `media`, `interaction`, `condition`, `never` | Partial | `visible` covered; remaining strategies planned |
+| Hydration | `initializeHydrationEventCapture` | Planned | Client lifecycle fixture |
+| Actions | `useActionState`, `useFormStatus`, `useOptimistic`, `requestFormReset` | Covered | `actions` golden and SSR assertion |
+| Composition | `Fragment` | Covered | Automatic output fragments in `fragment` |
+| Composition | `memo`, `useCallback` | Planned | Memoized component/callback fixture |
+| Composition | `useMemo` | Covered | `counter` golden |
+| Composition | `createPortal` | Covered | `portal` golden and SSR placeholder assertion |
+| View transitions | `ViewTransition`, `addTransitionType` | Covered | `transitions` golden and client/server assertions |
+| View transitions | `ViewTransitionPseudoElement` | Planned | Typed callback and pseudo-element animation fixture |
+| Roots | `createRoot` | Partial | Creator template and Vite production build |
+| Roots | `hydrateRoot` | Planned | Full SSR-to-hydration lifecycle fixture |
+| Behavior roots | `attachBehaviorRoot` | Planned | Existing-DOM ownership and disposal fixture |
+| Resources | `preload`, `preinit`, `preloadModule`, `preinitModule` | Planned | Resource-hint client/server fixture |
+| Resources | `preconnect`, `prefetchDNS` | Planned | Connection-hint client/server fixture |
+| Descriptors | `createElement`, `cloneElement` | Planned | Descriptor composition fixture |
+| Inspection | `isValidElement`, `isChildrenBlock`, `Children` | Planned | Library helper fixture |
+| Scheduling/testing | `flushSync`, `act` | Planned | Client root lifecycle fixture |
+| Debugging | `useDebugValue` | Planned | Compiler passthrough fixture |
+| Package | `version` | Planned | Public export assertion |
+| Server | `renderToString` | Covered | Multiple executable server assertions |
+| Server | `renderToStaticMarkup` | Planned | Buffered renderer parity fixture |
+| Server | `renderToPipeableStream`, `renderToReadableStream` | Planned | Node and Web stream assertions |
+| Server | `setSsrSuspenseTimeout`, `getSsrSuspenseTimeout` | Planned | Scoped timeout configuration assertion |
+| Static | `prerender`, `prerenderToNodeStream` | Planned | Await-everything buffered and stream assertions |
+
+`Partial` means the API already passes through Beast, but the complete public
+shape described in the Core APIs guide is not yet proven. A row moves to
+`Covered` only after its committed example or lifecycle test is documented and
+passes the repository's release checks.
+
 ## Next additions
 
 ### 1. Complete element-level TSRX syntax
@@ -53,7 +107,30 @@ blocks. Spread attributes are especially useful for wrapper components and for
 covering Octane's development-time native text-event checks when final host
 props are dynamic.
 
-### 2. Close application-integration gaps
+### 2. Finish component-level Core APIs
+
+Add focused fixtures for the remaining state, effect, ref, memoization,
+Activity, descriptor, resource, and debugging APIs. Keep APIs together when
+they share one coherent component scenario, but retain explicit assertions for
+every public call.
+
+### 3. Complete deferred-hydration coverage
+
+Exercise every hydration strategy, the complete `Hydrate` prop surface,
+permanently static ranges, and early interaction capture. Then add a full
+server-render and client-hydration fixture, including compiler-split children.
+
+### 4. Close client ownership and rendering gaps
+
+Cover `createRoot`, `hydrateRoot`, `flushSync`, `act`, portals, and behavior-only
+roots in executable DOM lifecycle tests rather than compilation-only examples.
+
+### 5. Complete server and static rendering
+
+Exercise buffered, Node-stream, Web-stream, await-everything, static, and
+Suspense-timeout entry points against Beast-compiled components.
+
+### 6. Close application-integration gaps
 
 The Vite path has client production coverage, but still needs full lifecycle
 fixtures for server transforms, rendering, hydration, and compiler-split
@@ -62,7 +139,7 @@ After that, add Beast adapters or documented precompile workflows for Octane's
 Rspack and Rsbuild integrations. Framework-specific adapters should follow
 only when the core bundler contracts are stable.
 
-### 3. Improve compiler tooling
+### 7. Improve compiler tooling
 
 Add Beast-to-TSRX source maps and a standalone watch mode. These are not Octane
 runtime capabilities, but they are required for complete diagnostics and a
@@ -73,8 +150,11 @@ non-Vite development workflow.
 The smallest dependency-aware sequence is:
 
 1. Spread attributes, explicit fragments, and style blocks.
-2. Vite SSR/hydration integration fixtures, including compiler-split Hydrate.
-3. Rspack/Rsbuild support, source maps, and standalone watch mode.
+2. Remaining component-level Core APIs.
+3. Complete deferred hydration and SSR-to-hydration fixtures.
+4. Client ownership, roots, and behavior-only roots.
+5. Server/static rendering APIs.
+6. Rspack/Rsbuild support, source maps, and standalone watch mode.
 
 [Quick start]: https://octanejs.dev/docs
 [Core APIs]: https://octanejs.dev/docs/core-apis

@@ -8,7 +8,7 @@
 [![Status: Alpha](https://img.shields.io/badge/status-alpha-d97706?style=flat-square)](#project-status)
 [![Version](https://img.shields.io/badge/version-0.1.0-6f42c1?style=flat-square)](package.json)
 [![Node.js](https://img.shields.io/badge/Node.js-%E2%89%A522.22.2-339933?style=flat-square&logo=nodedotjs&logoColor=white)](package.json)
-[![Octane](https://img.shields.io/badge/Octane-0.1.32-111827?style=flat-square)](https://octanejs.dev/)
+[![Octane](https://img.shields.io/badge/Octane-0.1.37-111827?style=flat-square)](https://octanejs.dev/)
 [![License: ISC](https://img.shields.io/badge/license-ISC-0f766e?style=flat-square)](LICENSE)
 
 **Write the structure. Keep the types. Let Octane own rendering.**
@@ -781,7 +781,7 @@ validation from Octane.
 | Bun | Current stable | Workspace, tests, project creation, and dependency installation |
 | TypeScript | `^5.9.3` | Package declarations and generated-project checking |
 | TSRX TypeScript plugin | `0.3.118` | `.tsrx` and `.btsx` project type checking |
-| Octane | `0.1.32` | TSRX validation, lowering, and runtime |
+| Octane | `0.1.37` | TSRX validation, lowering, and runtime |
 | Vite | `^8.0.16` | Development server and production bundling |
 
 Octane and TSRX are evolving. Beast pins the versions used by its conformance
@@ -906,7 +906,10 @@ Current limitations:
 See the [golden example index](examples/README.md) for focused BTSX inputs and
 the exact generated TSRX output contract. The living
 [Octane coverage map](docs/octane-coverage.md) separates supported runtime APIs
-from BTSX syntax and integration work that still remains.
+from BTSX syntax and integration work that still remains. Its public Core API
+ledger is synced to the official API index and the pinned Octane types, and a
+capability is marked covered only after its example or lifecycle test passes
+the release checks.
 
 ## License
 
