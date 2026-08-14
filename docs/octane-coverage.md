@@ -44,11 +44,12 @@ through `import`, `setup`, attributes, and nesting unchanged.
 | Context | Module-scoped `createContext`, dotted `Theme.Provider`, and local `use()`/`useContext()` consumers | `provider` golden |
 | Client ownership | Root mount/update/unmount, server-DOM adoption, dormant-boundary activation and event replay, synchronous/test scheduling, cross-container portals, and non-reconciling behavior ownership | Executable Happy DOM lifecycle suite |
 | Server and static rendering | Hydratable/static buffered output, scoped CSS/head channels, Node and Web progressive streams, await-everything output, aborts, deadlines, and complete Node preludes | Executable renderer lifecycle suite |
+| Public entry points | Every tracked name is present in the pinned `octane`, hydration, behavior, server, and static module namespaces | Machine-readable Core API inventory test |
 | Client bundling | Mixed BTSX/TSRX Vite application production build | project integration test |
 
 Every golden output is compared byte for byte and compiled with the pinned
-Octane compiler. Runtime APIs not named above are generally *expressible* but
-do not yet have a focused Beast example or integration test.
+Octane compiler. The focused lifecycle suites execute the non-template entry
+points, while a machine-readable inventory guards every tracked public export.
 
 ## Public Core API ledger
 
@@ -85,7 +86,7 @@ exports are outside this user-facing scope.
 | View transitions | `ViewTransitionPseudoElement` | Covered | Selector, `animate()`, and filtered `getAnimations()` runtime assertions |
 | Roots | `createRoot` | Covered | Executable mount, state update, same-component prop update, and unmount lifecycle |
 | Roots | `hydrateRoot` | Covered | Server-rendered node adoption, effect activation, event update, and unmount lifecycle |
-| Behavior roots | `attachBehaviorRoot` | Covered | Externally owned range gating, adoption, delegated event handling, cleanup, and DOM-preserving disposal |
+| Behavior roots | `attachBehaviorRoot` | Covered | Root/focused-entry parity plus externally owned range gating, adoption, events, cleanup, and DOM-preserving disposal |
 | Resources | `preload`, `preinit`, `preloadModule`, `preinitModule` | Covered | `library` client passthrough, server head emission, and dedupe assertions |
 | Resources | `preconnect`, `prefetchDNS` | Covered | `library` server head assertions |
 | Descriptors | `createElement`, `cloneElement` | Covered | `library` mapped and single cloned-descriptor SSR assertions |
@@ -102,6 +103,8 @@ exports are outside this user-facing scope.
 Every public Core API row is now `Covered`. This means its committed example or
 lifecycle test is documented and passes the repository's release checks; it
 does not claim coverage for compiler-private helpers or metaframework internals.
+The inventory test also fails if any tracked name disappears from its pinned
+public entry point.
 
 ## Next additions
 

@@ -303,7 +303,11 @@ describe("Octane client lifecycle", () => {
 
 describe("Octane behavior roots", () => {
   test("adopts an externally owned range and disposes without changing its DOM", async () => {
-    const { attachBehaviorRoot } = await import("octane/behavior");
+    const [{ attachBehaviorRoot }, octane] = await Promise.all([
+      import("octane/behavior"),
+      import("octane"),
+    ]);
+    expect(octane.attachBehaviorRoot).toBe(attachBehaviorRoot);
     const container = browser.document.createElement("main");
     container.innerHTML = '<article data-owner><button data-action type="button">Run</button></article>';
     browser.document.body.append(container);

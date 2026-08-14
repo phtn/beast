@@ -964,6 +964,8 @@ The current suite and release checks verify the behavior Beast claims publicly:
 
 - BTSX fixtures must match committed TSRX output byte for byte.
 - Every golden TSRX fixture must compile through Octane without diagnostics.
+- Every tracked Core API name must remain exported from its pinned public
+  Octane entry point.
 - Compiled client roots must mount, update, hydrate existing nodes, activate
   deferred boundaries, preserve portal event ancestry, and dispose owned work.
 - Behavior-only roots must honor external ownership and retain existing DOM on
@@ -1027,7 +1029,8 @@ beast/
 ├── docs/
 │   └── octane-coverage.md       # Official-doc coverage map and roadmap
 ├── tests/
-│   ├── compiler.test.ts         # Compiler and Octane conformance tests
+│   ├── compiler.test.ts         # Compiler and Octane behavior conformance
+│   ├── core-api.test.ts         # Pinned public Core API export inventory
 │   ├── project.test.ts          # Project builder and Vite tests
 │   ├── runtime.test.ts          # Client hydration, roots, portals, and behavior
 │   └── server.test.ts           # Buffered, streaming, and static rendering
@@ -1091,7 +1094,7 @@ the exact generated TSRX output contract. The living
 from BTSX syntax and integration work that still remains. Its public Core API
 ledger is synced to the official API index and the pinned Octane types, and a
 capability is marked covered only after its example or lifecycle test passes
-the release checks.
+the release checks. Every row in that ledger is covered for `octane@0.1.37`.
 
 ## License
 
