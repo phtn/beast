@@ -19,6 +19,7 @@ goldens are also included in the published `beast-tsrx` package.
 | [`deferred`](deferred/deferred.btsx) | `lazy` under `Suspense`/`ErrorBoundary` plus visibility-triggered `Hydrate` composition |
 | [`editor`](editor/editor.btsx) | Strong-mode `useLinkedState`, controlled text input, native `onInput`, and form submission |
 | [`fragment`](fragment/fragment.btsx) | Multiple roots, text-only lines, comments, escaping, and interpolation |
+| [`hooks`](hooks/hooks.btsx) | Initialized reducer/getter, effect phases/events, IDs, imperative handles, memo/callback, and debug labels |
 | [`network`](network/network.btsx) | Stable browser subscription and deterministic SSR with `useSyncExternalStore` |
 | [`portal`](portal/portal.btsx) | `createPortal` with a tagless local body, wrapper props, and logical event ancestry |
 | [`provider`](provider/provider.btsx) | Tagless local components, module-scoped Context, dotted provider, and `use()`/`useContext()` consumers |

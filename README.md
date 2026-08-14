@@ -309,6 +309,32 @@ The same `ref={...}` attribute can be passed to a component that declares a
 ref prop; Beast does not require or insert a forwarding wrapper. See the
 complete [refs golden](examples/refs/refs.btsx).
 
+The remaining component hook APIs use the same setup passthrough. The
+[advanced hooks golden](examples/hooks/hooks.btsx) combines an initialized
+`useReducer` (including its current-state getter), `useId`, `useCallback`,
+`memo`, `useEffectEvent`, `useImperativeHandle`, insertion/layout effects, and
+`useDebugValue` in one component. For example:
+
+```btsx
+setup
+  const [count, dispatch, getCount] = useReducer(reduceCount, initialCount, (value) => value * 2);
+  const descriptionId = useId();
+  const increment = useCallback(() => dispatch({ type: "increment" }));
+  const reportLatest = useEffectEvent(() => onReport(getCount()));
+  useImperativeHandle(handleRef, () => ({ read: getCount }));
+  useLayoutEffect(() => onPhase("layout"));
+
+section(aria-labelledby={descriptionId})
+  h2(id={descriptionId}) Advanced hooks
+  button(type="button" onClick={increment}) Increment
+  button(type="button" onClick={reportLatest}) Report latest
+```
+
+Octane infers dependencies when the optional arrays are omitted. The
+conformance test checks the lowered hook slots and server rendering, including
+the rule that insertion/layout effects and imperative handle attachment do not
+run during SSR.
+
 For state already owned outside Octane, keep subscription and snapshot
 functions stable at module scope, then call `useSyncExternalStore` from setup.
 Its third argument provides a deterministic server snapshot:
@@ -871,6 +897,7 @@ beast/
 │   ├── deferred/                # Lazy boundaries and deferred hydration
 │   ├── editor/                  # Linked controlled input and native events
 │   ├── fragment/                # Multiple roots, text, and escaping
+│   ├── hooks/                   # Reducer, effect phases, IDs, memo, and handles
 │   ├── network/                 # External-store subscription and SSR snapshot
 │   ├── portal/                  # Cross-container rendering and logical ancestry
 │   ├── provider/                # Context provider and consumer hooks

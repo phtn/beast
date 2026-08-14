@@ -166,6 +166,67 @@ describe("BTSX to TSRX", () => {
     expect(getCompileError(source, "InvalidElement.btsx").diagnostic.code).toBe(code);
   });
 
+  test("compiles advanced hook APIs and preserves their server semantics", async () => {
+    const filename = resolve("examples/hooks/hooks.btsx");
+    const source = await readFile(filename, "utf8");
+    const result = compileBeastResult(source, { filename });
+
+    for (const api of [
+      "memo(",
+      "useCallback(",
+      "useDebugValue(",
+      "useEffectEvent(",
+      "useId(",
+      "useImperativeHandle(",
+      "useInsertionEffect(",
+      "useLayoutEffect(",
+      "useReducer(",
+    ]) {
+      expect(result.code).toContain(api);
+    }
+
+    const tsrxFilename = filename.replace(/\.btsx$/u, ".tsrx");
+    const client = compile(result.code, tsrxFilename, {
+      mode: "client",
+      hmr: false,
+      dev: true,
+    });
+    expect(client.diagnostics).toHaveLength(0);
+    expect(client.code).toContain("__useReducerWithGetter");
+    expect(client.code).toContain("useMemo(() => memo(CountSummary, sameSummary), [], 2)");
+    expect(client.code).toContain("useCallback(() => dispatch({ type: \"increment\" }), [], 3)");
+    expect(client.code).toContain("useEffectEvent(() => onReport(getCount()), 4)");
+    expect(client.code).toContain("useImperativeHandle(handleRef");
+    expect(client.code).toContain("useInsertionEffect(");
+    expect(client.code).toContain("useLayoutEffect(");
+
+    const server = compile(result.code, tsrxFilename, {
+      mode: "server",
+      hmr: false,
+      dev: true,
+    });
+    expect(server.diagnostics).toHaveLength(0);
+    const phases: string[] = [];
+    const reports: number[] = [];
+    const handleRef: { current: { reset(): void; read(): number } | null } = {
+      current: null,
+    };
+    const rendered = await renderCompiledServerResult(server.code, {
+      initialCount: 3,
+      handleRef,
+      onPhase: (phase: string) => phases.push(phase),
+      onReport: (count: number) => reports.push(count),
+    });
+
+    const id = rendered.html.match(/aria-labelledby="([^"]+)"/u)?.[1];
+    expect(id).toBeDefined();
+    expect(rendered.html).toContain(`<h2 id="${id}">Advanced hooks</h2>`);
+    expect(rendered.html).toContain("<p>Reducer count: <!--[-->6<!--]--></p>");
+    expect(phases).toEqual([]);
+    expect(reports).toEqual([]);
+    expect(handleRef.current).toBeNull();
+  });
+
   test("emits Octane empty branches for loops", () => {
     const result = compileBeastResult(
       "each item in items key item.id\n  Row(item={item})\nempty\n  p No items.\n",

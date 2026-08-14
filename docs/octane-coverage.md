@@ -21,6 +21,7 @@ through `import`, `setup`, attributes, and nesting unchanged.
 | --- | --- | --- |
 | Components, typed props, children | Native elements, component references, source imports, typed props, and tagless local component declarations | `app`, `provider` goldens |
 | Setup and hooks | Inline TypeScript setup; `useState`, `useMemo`, and `useEffect` compile through Octane | `counter` golden |
+| Advanced hooks | Initialized reducer/current-state getter, insertion/layout phases, effect events, generated IDs, imperative handles, stable callbacks, memoized components, and debug labels | `hooks` golden, client lowering assertions, and SSR assertion |
 | Module/setup source | Inline and multiline raw TypeScript, module directives, comments, blank lines, refs, and effect cleanup | `shortcut` golden |
 | Refs | Object refs, callback refs with cleanup, and arrays of refs pass through as ordinary props | `refs`, `shortcut` goldens |
 | Native events and attributes | Expression, string, boolean, spread, ARIA, data, class, ID, native `onInput`, and form events, with authored spread precedence | `catalog`, `counter`, `editor`, `styling` goldens |
@@ -57,14 +58,14 @@ exports are outside this user-facing scope.
 | Area | API | Status | Current proof or next fixture |
 | --- | --- | --- | --- |
 | State | `useState` | Covered | `counter`, `responsive`, and `transitions` goldens |
-| State | `useReducer` | Planned | Reducer and latest-state getter fixture |
+| State | `useReducer` | Covered | `hooks` initialized reducer, latest-state getter lowering, and SSR assertion |
 | State | `useLinkedState` | Covered | `editor` golden |
 | Context | `createContext`, `use(context)`, `useContext` | Covered | `provider` golden |
 | Async data | `use(Promise)` | Planned | Suspense success/fallback server assertions |
 | External state | `useSyncExternalStore` | Covered | `network` golden and SSR assertion |
 | Refs/effects | `useRef`, `useEffect` | Covered | `refs`, `shortcut`, and `counter` goldens |
-| Refs/effects | `useLayoutEffect`, `useInsertionEffect`, `useEffectEvent` | Planned | Effect-phase conformance fixture |
-| Refs/effects | `useId`, `useImperativeHandle` | Planned | Accessible ID and custom ref handle fixture |
+| Refs/effects | `useLayoutEffect`, `useInsertionEffect`, `useEffectEvent` | Covered | `hooks` client lowering and server no-effect assertion |
+| Refs/effects | `useId`, `useImperativeHandle` | Covered | `hooks` linked SSR ID and server-inert handle assertion |
 | Loading | `Suspense`, `ErrorBoundary`, `lazy` | Covered | `deferred` golden and client/server compilation |
 | Loading | `startTransition`, `useTransition`, `useDeferredValue` | Covered | `responsive` and `transitions` goldens with SSR |
 | Loading | `Activity` | Planned | Visible/hidden/prerender compilation and SSR fixture |
@@ -72,8 +73,8 @@ exports are outside this user-facing scope.
 | Hydration | `load`, `idle`, `visible`, `media`, `interaction`, `condition`, `never` | Partial | `visible` covered; remaining strategies planned |
 | Hydration | `initializeHydrationEventCapture` | Planned | Client lifecycle fixture |
 | Actions | `useActionState`, `useFormStatus`, `useOptimistic`, `requestFormReset` | Covered | `actions` golden and SSR assertion |
-| Composition | `Fragment` | Covered | Automatic output fragments in `fragment` |
-| Composition | `memo`, `useCallback` | Planned | Memoized component/callback fixture |
+| Composition | `Fragment` | Covered | Automatic output in `fragment` and explicit source fragment in `styling` |
+| Composition | `memo`, `useCallback` | Covered | `hooks` memoized local summary and stable dispatch callback |
 | Composition | `useMemo` | Covered | `counter` golden |
 | Composition | `createPortal` | Covered | `portal` golden and SSR placeholder assertion |
 | View transitions | `ViewTransition`, `addTransitionType` | Covered | `transitions` golden and client/server assertions |
@@ -86,7 +87,7 @@ exports are outside this user-facing scope.
 | Descriptors | `createElement`, `cloneElement` | Planned | Descriptor composition fixture |
 | Inspection | `isValidElement`, `isChildrenBlock`, `Children` | Planned | Library helper fixture |
 | Scheduling/testing | `flushSync`, `act` | Planned | Client root lifecycle fixture |
-| Debugging | `useDebugValue` | Planned | Compiler passthrough fixture |
+| Debugging | `useDebugValue` | Covered | `hooks` client/server lowering assertion |
 | Package | `version` | Planned | Public export assertion |
 | Server | `renderToString` | Covered | Multiple executable server assertions |
 | Server | `renderToStaticMarkup` | Planned | Buffered renderer parity fixture |
@@ -101,12 +102,11 @@ passes the repository's release checks.
 
 ## Next additions
 
-### 1. Finish component-level Core APIs
+### 1. Complete async and visibility APIs
 
-Add focused fixtures for the remaining state, effect, ref, memoization,
-Activity, descriptor, resource, and debugging APIs. Keep APIs together when
-they share one coherent component scenario, but retain explicit assertions for
-every public call.
+Add focused fixtures for promise-valued `use()` and every `Activity` mode, then
+compose both with Suspense and hydration where their visible server behavior
+can be asserted.
 
 ### 2. Complete deferred-hydration coverage
 
@@ -114,17 +114,23 @@ Exercise every hydration strategy, the complete `Hydrate` prop surface,
 permanently static ranges, and early interaction capture. Then add a full
 server-render and client-hydration fixture, including compiler-split children.
 
-### 3. Close client ownership and rendering gaps
+### 3. Cover library and resource helpers
+
+Exercise descriptors, Children inspection, resource hints, view-transition
+pseudo-elements, and the public package version with direct assertions for
+every export.
+
+### 4. Close client ownership and rendering gaps
 
 Cover `createRoot`, `hydrateRoot`, `flushSync`, `act`, portals, and behavior-only
 roots in executable DOM lifecycle tests rather than compilation-only examples.
 
-### 4. Complete server and static rendering
+### 5. Complete server and static rendering
 
 Exercise buffered, Node-stream, Web-stream, await-everything, static, and
 Suspense-timeout entry points against Beast-compiled components.
 
-### 5. Close application-integration gaps
+### 6. Close application-integration gaps
 
 The Vite path has client production coverage, but still needs full lifecycle
 fixtures for server transforms, rendering, hydration, and compiler-split
@@ -133,7 +139,7 @@ After that, add Beast adapters or documented precompile workflows for Octane's
 Rspack and Rsbuild integrations. Framework-specific adapters should follow
 only when the core bundler contracts are stable.
 
-### 6. Improve compiler tooling
+### 7. Improve compiler tooling
 
 Add Beast-to-TSRX source maps and a standalone watch mode. These are not Octane
 runtime capabilities, but they are required for complete diagnostics and a
@@ -143,8 +149,9 @@ non-Vite development workflow.
 
 The smallest dependency-aware sequence is:
 
-1. Remaining component-level Core APIs.
-2. Complete deferred hydration and SSR-to-hydration fixtures.
+1. Promise `use()`, Activity, and complete deferred hydration.
+2. Resources, descriptors, inspection helpers, view-transition pseudo-elements,
+   and package metadata.
 3. Client ownership, roots, and behavior-only roots.
 4. Server/static rendering APIs.
 5. Rspack/Rsbuild support, source maps, and standalone watch mode.
