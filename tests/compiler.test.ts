@@ -23,6 +23,10 @@ function getCompileError(source: string, filename = "Invalid.btsx"): BeastCompil
 }
 
 async function renderCompiledServer(code: string, props?: unknown): Promise<string> {
+  return (await renderCompiledServerResult(code, props)).html;
+}
+
+async function renderCompiledServerResult(code: string, props?: unknown) {
   const executable = code.replace(
     "'octane/server'",
     JSON.stringify(import.meta.resolve("octane/server")),
@@ -36,7 +40,7 @@ async function renderCompiledServer(code: string, props?: unknown): Promise<stri
     const compiled = (await import(pathToFileURL(modulePath).href)) as {
       default: Parameters<typeof renderToString>[0];
     };
-    return renderToString(compiled.default, props).html;
+    return renderToString(compiled.default, props);
   } finally {
     await rm(temporaryDirectory, { recursive: true, force: true });
   }
@@ -68,6 +72,98 @@ describe("BTSX to TSRX", () => {
       filename: "List.btsx",
     });
     expect(output).toContain("@for (const item of items; index i; key item.id)");
+  });
+
+  test("preserves spread attributes and their authored precedence", () => {
+    const result = compileBeastResult(
+      'button.primary(type="button" {...defaults} class={className} {...overrides}) Continue\n',
+      { filename: "SpreadButton.btsx" },
+    );
+
+    expect(result.code).toContain(
+      '<button type="button" {...defaults} className={[className, "primary"].filter(Boolean).join(" ")} {...overrides}>',
+    );
+    const button = result.ast.children[0];
+    expect(button?.kind).toBe("element");
+    if (button?.kind === "element") {
+      expect(button.attrs).toMatchObject([
+        { kind: "attribute", name: "type", value: { type: "string", value: "button" } },
+        { kind: "spread", code: "defaults" },
+        { kind: "attribute", name: "class", value: { type: "expr", code: "className" } },
+        { kind: "spread", code: "overrides" },
+      ]);
+    }
+  });
+
+  test("emits explicit fragments and verbatim scoped style blocks", async () => {
+    const filename = resolve("examples/styling/styling.btsx");
+    const source = await readFile(filename, "utf8");
+    const result = compileBeastResult(source, { filename });
+
+    expect(result.ast.children[0]).toMatchObject({
+      kind: "fragment",
+      children: [
+        { kind: "element" },
+        {
+          kind: "style",
+          css: [
+            ".card {",
+            "  padding: 1rem;",
+            "}",
+            "",
+            ".card h2 {",
+            "  color: rebeccapurple;",
+            "}",
+            "",
+            ":global(body) {",
+            "  margin: 0;",
+            "}",
+          ].join("\n"),
+        },
+      ],
+    });
+    expect(result.code).toContain("\t<>\n\t\t<article className=\"card\" {...cardProps}>");
+    expect(result.code).toContain(
+      "\t\t<style>\n\t\t\t.card {\n\t\t\t  padding: 1rem;\n\t\t\t}",
+    );
+
+    const tsrxFilename = filename.replace(/\.btsx$/u, ".tsrx");
+    const client = compile(result.code, tsrxFilename, {
+      mode: "client",
+      hmr: false,
+      dev: true,
+    });
+    expect(client.diagnostics).toHaveLength(0);
+    expect(client.code).toContain("injectStyle");
+    expect(client.code).toContain("snapshotSpread");
+
+    const server = compile(result.code, tsrxFilename, {
+      mode: "server",
+      hmr: false,
+      dev: true,
+    });
+    expect(server.diagnostics).toHaveLength(0);
+    const rendered = await renderCompiledServerResult(server.code, {
+      title: "Scoped card",
+      cardProps: { "data-tone": "bright" },
+    });
+
+    expect(rendered.html).toMatch(
+      /<article class="card tsrx-[a-z0-9]+" data-tone="bright">/u,
+    );
+    expect(rendered.css).toContain("padding: 1rem;");
+    expect(rendered.css).toContain("color: rebeccapurple;");
+    expect(rendered.css).toContain("body {");
+    expect(rendered.css).toContain("margin: 0;");
+  });
+
+  test.each([
+    ["empty fragment", "fragment\n", "BEAST1901_EMPTY_FRAGMENT"],
+    ["empty style", "style\n", "BEAST1902_EMPTY_STYLE"],
+    ["empty spread", "button({...})\n", "BEAST1202_INVALID_ATTRIBUTE"],
+    ["non-spread braces", "button({props})\n", "BEAST1202_INVALID_ATTRIBUTE"],
+  ])("reports invalid element syntax for %s", (_label, source, code) => {
+    expect(getCompileError(source, "InvalidElement.btsx").diagnostic.code).toBe(code);
   });
 
   test("emits Octane empty branches for loops", () => {

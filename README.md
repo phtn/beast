@@ -458,10 +458,12 @@ Button(tone="primary" count={items.length} disabled) Continue
 | `name='value'` | Single-quoted string attribute |
 | `name={expression}` | TypeScript expression attribute |
 | `disabled` | Boolean attribute |
+| `{...props}` | Ordered TypeScript spread attribute |
 
 `class` is normalized to `className`. Selector shorthand and an explicit class
 are combined; conflicting ID declarations and duplicate explicit class
-attributes are rejected.
+attributes are rejected. Spreads retain their authored position relative to
+named attributes, so later entries keep normal TSRX override precedence.
 
 ### Text and interpolation
 
@@ -480,6 +482,41 @@ div.notice
 
 Literal text is escaped in generated TSRX. Embedded expressions remain source
 slices and receive their final syntax validation from Octane.
+
+### Explicit fragments and scoped styles
+
+Use `fragment` when a specific subtree should compile to a native TSRX
+fragment, even when Beast would not need to insert one automatically:
+
+```btsx
+fragment
+  Header
+  main Content
+```
+
+A `style` node consumes its indented body as raw CSS. Octane scopes its
+selectors to the owning component, stamps the matching scope class on rendered
+elements, and collects the stylesheet during server rendering. Wrap a selector
+in `:global(...)` when it must remain unscoped:
+
+```btsx
+fragment
+  article.card({...cardProps})
+    h2 #{title}
+  style
+    .card {
+      padding: 1rem;
+    }
+
+    :global(body) {
+      margin: 0;
+    }
+```
+
+Beast removes only the CSS block's common source indentation and otherwise
+preserves its text. See the complete
+[styling golden](examples/styling/styling.btsx) for explicit fragments,
+ordered prop spreading, scoped descendants, and a global escape.
 
 ### Conditions
 
@@ -595,7 +632,8 @@ SSR/hydration bundler lifecycle. See the complete
 ### Comments and roots
 
 Lines beginning with `//` are omitted from output. A component with multiple
-root nodes, no root node, or a text-only root is wrapped in a TSRX fragment.
+root nodes, no root node, a text-only root, or a style-only root is wrapped in
+a TSRX fragment. An authored `fragment` always remains explicit in the output.
 
 ## CLI reference
 
@@ -840,6 +878,7 @@ beast/
 │   ├── responsive/              # Transitions and deferred search output
 │   ├── shortcut/                # Multiline source and effect cleanup
 │   ├── status/                  # Nested loops and branch chains
+│   ├── styling/                 # Spreads, explicit fragments, and scoped CSS
 │   ├── transitions/             # View-transition classes and typed directions
 │   └── variant/                 # Multi-way switch output
 ├── docs/
@@ -893,8 +932,6 @@ Current limitations:
 
 - The CLI builder has no per-file configuration file; use the programmatic API
   or Vite component options.
-- Spread attributes, explicit source fragments, and raw style blocks are not
-  exposed in BTSX.
 - Beast-to-TSRX source maps are not implemented. Vite currently returns
   Octane's map for the generated TSRX layer.
 - Standalone watch mode is not implemented; Vite owns watched application

@@ -26,6 +26,7 @@ goldens are also included in the published `beast-tsrx` package.
 | [`responsive`](responsive/responsive.btsx) | Non-urgent tab updates with `useTransition` and immediate search with `useDeferredValue` |
 | [`shortcut`](shortcut/shortcut.btsx) | Multiline module/setup source, Strong mode, `useRef`, and effect cleanup |
 | [`status`](status/status.btsx) | Nested loops plus `elseif` and `else` branches |
+| [`styling`](styling/styling.btsx) | Ordered spread attributes, an explicit fragment, scoped CSS, and a `:global()` escape |
 | [`transitions`](transitions/transitions.btsx) | `ViewTransition`, directional type classes, transition updates, and SSR annotations |
 | [`variant`](variant/variant.btsx) | Multi-way `switch`, `case`, and `default` output |
 

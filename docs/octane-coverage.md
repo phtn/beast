@@ -23,7 +23,8 @@ through `import`, `setup`, attributes, and nesting unchanged.
 | Setup and hooks | Inline TypeScript setup; `useState`, `useMemo`, and `useEffect` compile through Octane | `counter` golden |
 | Module/setup source | Inline and multiline raw TypeScript, module directives, comments, blank lines, refs, and effect cleanup | `shortcut` golden |
 | Refs | Object refs, callback refs with cleanup, and arrays of refs pass through as ordinary props | `refs`, `shortcut` goldens |
-| Native events and attributes | Expression, string, boolean, ARIA, data, class, ID, native `onInput`, and form events | `catalog`, `counter`, `editor` goldens |
+| Native events and attributes | Expression, string, boolean, spread, ARIA, data, class, ID, native `onInput`, and form events, with authored spread precedence | `catalog`, `counter`, `editor`, `styling` goldens |
+| Element composition and CSS | Explicit and automatic fragments plus raw, component-scoped style blocks with `:global()` escapes | `fragment`, `styling` goldens and styling SSR assertion |
 | Linked controlled state | Strong-mode `useLinkedState` reconciles editable state by source identity | `editor` golden |
 | External stores | Stable subscription/client snapshot functions and a deterministic server snapshot pass through `useSyncExternalStore` | `network` golden and SSR assertion |
 | Responsive updates | `useTransition` marks tab changes as non-urgent while `useDeferredValue` lets search results lag behind controlled input | `responsive` golden and SSR assertion |
@@ -36,7 +37,7 @@ through `import`, `setup`, attributes, and nesting unchanged.
 | Multi-way branches | `switch`, `case`, and `default` emit native `@switch` arms | `variant` golden |
 | Async/error boundaries | `try`, `pending`, and bound `catch` emit native boundary arms | `boundary` golden |
 | Runtime boundary components | `lazy` composes under `Suspense` and `ErrorBoundary`; visibility-triggered `Hydrate` defers interactivity with eager child code | `deferred` golden |
-| Fragments and text holes | Automatic output fragments, text-only lines, escaping, and interpolation | `fragment` golden |
+| Fragments and text holes | Explicit and automatic output fragments, text-only lines, escaping, and interpolation | `fragment`, `styling` goldens |
 | Context | Module-scoped `createContext`, dotted `Theme.Provider`, and local `use()`/`useContext()` consumers | `provider` golden |
 | Client bundling | Mixed BTSX/TSRX Vite application production build | project integration test |
 
@@ -100,37 +101,30 @@ passes the repository's release checks.
 
 ## Next additions
 
-### 1. Complete element-level TSRX syntax
-
-Add spread attributes, an explicit source fragment form, and raw/scoped style
-blocks. Spread attributes are especially useful for wrapper components and for
-covering Octane's development-time native text-event checks when final host
-props are dynamic.
-
-### 2. Finish component-level Core APIs
+### 1. Finish component-level Core APIs
 
 Add focused fixtures for the remaining state, effect, ref, memoization,
 Activity, descriptor, resource, and debugging APIs. Keep APIs together when
 they share one coherent component scenario, but retain explicit assertions for
 every public call.
 
-### 3. Complete deferred-hydration coverage
+### 2. Complete deferred-hydration coverage
 
 Exercise every hydration strategy, the complete `Hydrate` prop surface,
 permanently static ranges, and early interaction capture. Then add a full
 server-render and client-hydration fixture, including compiler-split children.
 
-### 4. Close client ownership and rendering gaps
+### 3. Close client ownership and rendering gaps
 
 Cover `createRoot`, `hydrateRoot`, `flushSync`, `act`, portals, and behavior-only
 roots in executable DOM lifecycle tests rather than compilation-only examples.
 
-### 5. Complete server and static rendering
+### 4. Complete server and static rendering
 
 Exercise buffered, Node-stream, Web-stream, await-everything, static, and
 Suspense-timeout entry points against Beast-compiled components.
 
-### 6. Close application-integration gaps
+### 5. Close application-integration gaps
 
 The Vite path has client production coverage, but still needs full lifecycle
 fixtures for server transforms, rendering, hydration, and compiler-split
@@ -139,7 +133,7 @@ After that, add Beast adapters or documented precompile workflows for Octane's
 Rspack and Rsbuild integrations. Framework-specific adapters should follow
 only when the core bundler contracts are stable.
 
-### 7. Improve compiler tooling
+### 6. Improve compiler tooling
 
 Add Beast-to-TSRX source maps and a standalone watch mode. These are not Octane
 runtime capabilities, but they are required for complete diagnostics and a
@@ -149,12 +143,11 @@ non-Vite development workflow.
 
 The smallest dependency-aware sequence is:
 
-1. Spread attributes, explicit fragments, and style blocks.
-2. Remaining component-level Core APIs.
-3. Complete deferred hydration and SSR-to-hydration fixtures.
-4. Client ownership, roots, and behavior-only roots.
-5. Server/static rendering APIs.
-6. Rspack/Rsbuild support, source maps, and standalone watch mode.
+1. Remaining component-level Core APIs.
+2. Complete deferred hydration and SSR-to-hydration fixtures.
+3. Client ownership, roots, and behavior-only roots.
+4. Server/static rendering APIs.
+5. Rspack/Rsbuild support, source maps, and standalone watch mode.
 
 [Quick start]: https://octanejs.dev/docs
 [Core APIs]: https://octanejs.dev/docs/core-apis
