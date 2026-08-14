@@ -22,6 +22,7 @@ goldens are also included in the published `beast-tsrx` package.
 | [`fragment`](fragment/fragment.btsx) | Multiple roots, text-only lines, comments, escaping, and interpolation |
 | [`hooks`](hooks/hooks.btsx) | Initialized reducer/getter, effect phases/events, IDs, imperative handles, memo/callback, and debug labels |
 | [`hydration`](hydration/hydration.btsx) | Every hydration strategy, complete `Hydrate` props, child extraction, permanent-static output, and early capture |
+| [`library`](library/library.btsx) | Element descriptors, every `Children` helper, children-block inspection, and all resource/connection hints |
 | [`network`](network/network.btsx) | Stable browser subscription and deterministic SSR with `useSyncExternalStore` |
 | [`portal`](portal/portal.btsx) | `createPortal` with a tagless local body, wrapper props, and logical event ancestry |
 | [`provider`](provider/provider.btsx) | Tagless local components, module-scoped Context, dotted provider, and `use()`/`useContext()` consumers |

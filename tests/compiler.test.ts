@@ -6,6 +6,7 @@ import { pathToFileURL } from "node:url";
 import { compile } from "octane/compiler";
 import { initializeHydrationEventCapture } from "octane/hydration";
 import { renderToString } from "octane/server";
+import { ViewTransitionPseudoElement, version } from "octane";
 import {
   BeastCompileError,
   compileBeast,
@@ -375,6 +376,148 @@ describe("BTSX to TSRX", () => {
     expect(registrations).toHaveLength(firstCount);
     expect(new Set(registrations.map(({ type }) => type)).size).toBe(firstCount);
     expect(registrations.every(({ capture }) => capture)).toBe(true);
+  });
+
+  test("renders resource hints and executes descriptor and Children helpers", async () => {
+    const filename = resolve("examples/library/library.btsx");
+    const source = await readFile(filename, "utf8");
+    const result = compileBeastResult(source, { filename });
+    const tsrxFilename = filename.replace(/\.btsx$/u, ".tsrx");
+
+    const client = compile(result.code, tsrxFilename, {
+      mode: "client",
+      hmr: false,
+      dev: true,
+    });
+    expect(client.diagnostics).toHaveLength(0);
+    for (const api of [
+      "Children.forEach",
+      "Children.map",
+      "Children.count",
+      "Children.toArray",
+      "Children.only",
+      "cloneElement",
+      "createElement",
+      "isChildrenBlock",
+      "isValidElement",
+      "preconnect",
+      "prefetchDNS",
+      "preinit",
+      "preinitModule",
+      "preload",
+      "preloadModule",
+    ]) {
+      expect(client.code).toContain(api);
+    }
+    expect(client.code).toContain("markChildrenBlock");
+
+    const server = compile(result.code, tsrxFilename, {
+      mode: "server",
+      hmr: false,
+      dev: true,
+    });
+    expect(server.diagnostics).toHaveLength(0);
+    const rendered = await renderCompiledServerResult(server.code);
+
+    expect(rendered.html.match(/<link rel="preload"[^>]*beast\.woff2[^>]*>/gu)).toHaveLength(1);
+    expect(rendered.html).toContain(
+      '<link rel="stylesheet" href="/assets/app.css" data-precedence="critical">',
+    );
+    expect(rendered.html).toContain(
+      '<script src="/assets/runtime.js" async data-oct-res=""></script>',
+    );
+    expect(rendered.html).toContain(
+      '<link rel="modulepreload" href="/assets/chart.js" crossorigin="anonymous"',
+    );
+    expect(rendered.html).toContain(
+      '<script type="module" src="/assets/editor.js" async',
+    );
+    expect(rendered.html).toContain(
+      '<link rel="preconnect" href="https://api.example.com" crossorigin="anonymous"',
+    );
+    expect(rendered.html).toContain(
+      '<link rel="dns-prefetch" href="https://cdn.example.com"',
+    );
+    expect(rendered.html.indexOf("/assets/app.css")).toBeLessThan(
+      rendered.html.indexOf('<section class="library-apis">'),
+    );
+    expect(rendered.html).toContain(
+      '<p data-count="4" data-flattened="2" data-visited="4" data-valid="true">',
+    );
+    expect(rendered.html).toContain(
+      '<li class="base" data-kind="base" data-index="0">Base</li>',
+    );
+    expect(rendered.html).toContain(
+      '<li class="cloned" data-kind="clone" data-index="3">Cloned</li>',
+    );
+    expect(rendered.html).toContain(
+      '<section class="children-probe" data-children-block="true">',
+    );
+  });
+
+  test("passes through version and ViewTransitionPseudoElement integrations", async () => {
+    const source = [
+      'import { ViewTransitionPseudoElement, version } from "octane";',
+      "module",
+      "  export function animateHero() {",
+      '    const pseudo = new ViewTransitionPseudoElement("new", "hero");',
+      "    return pseudo.animate([{ opacity: 0 }, { opacity: 1 }], 180);",
+      "  }",
+      "p Octane #{version}",
+    ].join("\n");
+    const result = compileBeastResult(source, { filename: "RuntimeInfo.btsx" });
+    const client = compile(result.code, "RuntimeInfo.tsrx", {
+      mode: "client",
+      hmr: false,
+      dev: true,
+    });
+
+    expect(client.diagnostics).toHaveLength(0);
+    expect(client.code).toContain("ViewTransitionPseudoElement");
+    expect(client.code).toContain("version");
+    const manifest = JSON.parse(await readFile(resolve("package.json"), "utf8")) as {
+      devDependencies: { octane: string };
+    };
+    expect(version).toBe(manifest.devDependencies.octane);
+
+    const selector = "::view-transition-new(hero)";
+    const matching = { effect: { pseudoElement: selector } } as unknown as Animation;
+    const other = {
+      effect: { pseudoElement: "::view-transition-old(hero)" },
+    } as unknown as Animation;
+    const calls: Array<{ keyframes: unknown; options: unknown }> = [];
+    const previousDocument = Object.getOwnPropertyDescriptor(globalThis, "document");
+    Object.defineProperty(globalThis, "document", {
+      configurable: true,
+      value: {
+        documentElement: {
+          animate(keyframes: unknown, options: unknown) {
+            calls.push({ keyframes, options });
+            return matching;
+          },
+          getAnimations() {
+            return [matching, other];
+          },
+        },
+      },
+    });
+
+    try {
+      const pseudo = new ViewTransitionPseudoElement("new", "hero");
+      const keyframes = [{ opacity: 0 }, { opacity: 1 }];
+      expect(pseudo.selector).toBe(selector);
+      expect(pseudo.animate(keyframes, 180)).toBe(matching);
+      expect(calls).toEqual([
+        { keyframes, options: { duration: 180, pseudoElement: selector } },
+      ]);
+      expect(pseudo.getAnimations()).toEqual([matching]);
+    } finally {
+      if (previousDocument === undefined) {
+        delete (globalThis as { document?: Document }).document;
+      } else {
+        Object.defineProperty(globalThis, "document", previousDocument);
+      }
+    }
   });
 
   test("emits Octane empty branches for loops", () => {

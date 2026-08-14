@@ -405,6 +405,12 @@ component props. The complete
 and exit classes, typed navigation state, Octane's client preload hint, and
 server transition annotations.
 
+Advanced integrations can use `ViewTransitionPseudoElement` to target a
+boundary's group, image-pair, old, or new pseudo-element through the Web
+Animations API. The conformance suite verifies its selector, animation options,
+and filtered `getAnimations()` result, and also checks Octane's exported
+`version` against Beast's pinned dependency.
+
 Portals use a normal module helper that returns `createPortal`. A tagless local
 component can be passed as the portal body, so BTSX does not need to embed a
 TSRX fragment inside the call:
@@ -430,6 +436,30 @@ SavedToast(target={target} onDismiss={onDismiss})
 The optional third argument supplies props to the portal body. The complete
 [portal golden](examples/portal/portal.btsx) keeps the physical overlay under
 its logical Beast parent so Octane can preserve context and event ancestry.
+
+Library code can create and adapt renderable descriptors without embedding
+TSRX tags inside setup. `Children` supplies React-shaped traversal helpers,
+while `isValidElement` and `isChildrenBlock` distinguish descriptors from a
+compiled component-children function:
+
+```btsx
+import { Children, cloneElement, createElement, isValidElement } from "octane";
+setup
+  const base = createElement("li", { key: "base" }, "Base");
+  const cloned = cloneElement(base, { className: "selected" }, "Cloned");
+  const mapped = Children.map([base, null, cloned], (child, index) =>
+    isValidElement(child) ? cloneElement(child, { "data-index": index }) : child
+  );
+
+ul
+  | #{mapped}
+```
+
+Resource hints are also ordinary setup calls. `preload`, `preinit`,
+`preloadModule`, `preinitModule`, `preconnect`, and `prefetchDNS` pass through
+to Octane, which deduplicates them and collects their server tags ahead of the
+rendered body. The complete [library golden](examples/library/library.btsx)
+executes all descriptor/inspection helpers and all six resource APIs.
 
 Form actions can combine action-owned state, descendant status, optimistic
 output, and an uncontrolled-field reset. The optimistic update belongs inside
@@ -934,6 +964,7 @@ beast/
 │   ├── fragment/                # Multiple roots, text, and escaping
 │   ├── hooks/                   # Reducer, effect phases, IDs, memo, and handles
 │   ├── hydration/               # Strategies, prefetch, splitting, and capture
+│   ├── library/                 # Descriptors, Children helpers, and resources
 │   ├── network/                 # External-store subscription and SSR snapshot
 │   ├── portal/                  # Cross-container rendering and logical ancestry
 │   ├── provider/                # Context provider and consumer hooks

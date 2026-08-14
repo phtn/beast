@@ -39,6 +39,7 @@ through `import`, `setup`, attributes, and nesting unchanged.
 | Async/error boundaries | `try`, `pending`, and bound `catch` emit native boundary arms | `boundary` golden |
 | Runtime boundary components | `lazy` composes under `Suspense` and `ErrorBoundary`; Promise reads prove fulfilled, pending, and rejected server paths; `Activity` covers visible/hidden/prerender output | `deferred`, `async` goldens and async SSR assertions |
 | Deferred hydration | Every activation strategy, dynamic selection, strategy/procedural prefetch, fallback/completion props, default child extraction, permanent-static ranges, server markers, and idempotent early event capture | `hydration` golden, extracted-child compile, SSR assertions, and capture test |
+| Library and resources | Element creation/cloning, descriptor and children-block checks, all five `Children` methods, six resource/connection APIs, transition pseudo-element handles, and package version | `library` golden and SSR assertions plus pseudo-element/version runtime test |
 | Fragments and text holes | Explicit and automatic output fragments, text-only lines, escaping, and interpolation | `fragment`, `styling` goldens |
 | Context | Module-scoped `createContext`, dotted `Theme.Provider`, and local `use()`/`useContext()` consumers | `provider` golden |
 | Client bundling | Mixed BTSX/TSRX Vite application production build | project integration test |
@@ -79,17 +80,17 @@ exports are outside this user-facing scope.
 | Composition | `useMemo` | Covered | `counter` golden |
 | Composition | `createPortal` | Covered | `portal` golden and SSR placeholder assertion |
 | View transitions | `ViewTransition`, `addTransitionType` | Covered | `transitions` golden and client/server assertions |
-| View transitions | `ViewTransitionPseudoElement` | Planned | Typed callback and pseudo-element animation fixture |
+| View transitions | `ViewTransitionPseudoElement` | Covered | Selector, `animate()`, and filtered `getAnimations()` runtime assertions |
 | Roots | `createRoot` | Partial | Creator template and Vite production build |
 | Roots | `hydrateRoot` | Planned | Full SSR-to-hydration lifecycle fixture |
 | Behavior roots | `attachBehaviorRoot` | Planned | Existing-DOM ownership and disposal fixture |
-| Resources | `preload`, `preinit`, `preloadModule`, `preinitModule` | Planned | Resource-hint client/server fixture |
-| Resources | `preconnect`, `prefetchDNS` | Planned | Connection-hint client/server fixture |
-| Descriptors | `createElement`, `cloneElement` | Planned | Descriptor composition fixture |
-| Inspection | `isValidElement`, `isChildrenBlock`, `Children` | Planned | Library helper fixture |
+| Resources | `preload`, `preinit`, `preloadModule`, `preinitModule` | Covered | `library` client passthrough, server head emission, and dedupe assertions |
+| Resources | `preconnect`, `prefetchDNS` | Covered | `library` server head assertions |
+| Descriptors | `createElement`, `cloneElement` | Covered | `library` mapped and single cloned-descriptor SSR assertions |
+| Inspection | `isValidElement`, `isChildrenBlock`, `Children` | Covered | `library` traversal counts, flattened/mapped output, `only`, and compiled children-block assertion |
 | Scheduling/testing | `flushSync`, `act` | Planned | Client root lifecycle fixture |
 | Debugging | `useDebugValue` | Covered | `hooks` client/server lowering assertion |
-| Package | `version` | Planned | Public export assertion |
+| Package | `version` | Covered | Runtime export equals Beast's pinned Octane dependency |
 | Server | `renderToString` | Covered | Multiple executable server assertions |
 | Server | `renderToStaticMarkup` | Planned | Buffered renderer parity fixture |
 | Server | `renderToPipeableStream`, `renderToReadableStream` | Planned | Node and Web stream assertions |
@@ -103,25 +104,19 @@ passes the repository's release checks.
 
 ## Next additions
 
-### 1. Cover library and resource helpers
-
-Exercise descriptors, Children inspection, resource hints, view-transition
-pseudo-elements, and the public package version with direct assertions for
-every export.
-
-### 2. Close client ownership and rendering gaps
+### 1. Close client ownership and rendering gaps
 
 Cover `createRoot`, `hydrateRoot`, `flushSync`, `act`, portals, and behavior-only
 roots in executable DOM lifecycle tests rather than compilation-only examples.
 Include adoption and activation of server-rendered deferred boundaries so the
 already-covered Hydrate compiler surface is also proven end to end.
 
-### 3. Complete server and static rendering
+### 2. Complete server and static rendering
 
 Exercise buffered, Node-stream, Web-stream, await-everything, static, and
 Suspense-timeout entry points against Beast-compiled components.
 
-### 4. Close application-integration gaps
+### 3. Close application-integration gaps
 
 The Vite path has client production coverage, but still needs full lifecycle
 fixtures for server transforms, rendering, hydration, and compiler-split
@@ -130,7 +125,7 @@ After that, add Beast adapters or documented precompile workflows for Octane's
 Rspack and Rsbuild integrations. Framework-specific adapters should follow
 only when the core bundler contracts are stable.
 
-### 5. Improve compiler tooling
+### 4. Improve compiler tooling
 
 Add Beast-to-TSRX source maps and a standalone watch mode. These are not Octane
 runtime capabilities, but they are required for complete diagnostics and a
@@ -140,11 +135,9 @@ non-Vite development workflow.
 
 The smallest dependency-aware sequence is:
 
-1. Resources, descriptors, inspection helpers, view-transition pseudo-elements,
-   and package metadata.
-2. Client ownership, roots, deferred activation, and behavior-only roots.
-3. Server/static rendering APIs.
-4. Rspack/Rsbuild support, source maps, and standalone watch mode.
+1. Client ownership, roots, deferred activation, and behavior-only roots.
+2. Server/static rendering APIs.
+3. Rspack/Rsbuild support, source maps, and standalone watch mode.
 
 [Quick start]: https://octanejs.dev/docs
 [Core APIs]: https://octanejs.dev/docs/core-apis
