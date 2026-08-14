@@ -719,6 +719,27 @@ Applications that may receive input before `hydrateRoot()` should call
 is idempotent per document; Beast's test invokes it twice and verifies each
 supported capture listener is installed only once.
 
+### Client roots and existing-DOM behavior
+
+Compiled Beast components use Octane's normal root lifecycle. Mount with
+`createRoot(container).render(Component, props)`, or pass the server-rendered
+component and matching props to `hydrateRoot(container, Component, props)` to
+adopt its existing DOM. The returned root can update the same component in
+place and owns its eventual `unmount()` cleanup.
+
+`flushSync()` makes a scheduled DOM commit observable before the callback
+returns. Tests and integration harnesses should use `act()` to settle render
+work and insertion, layout, and passive effects before asserting. Beast's
+executable DOM suite covers both APIs, full-root adoption, an
+interaction-gated `Hydrate` boundary with first-event replay, and portal
+mount/update/unmount behavior.
+
+Existing markup that must not be reconciled can instead use
+`attachBehaviorRoot()` from `octane/behavior`. Behavior roots adopt matching
+elements, delegate events, and honor independently owned ranges while leaving
+their DOM intact on normal disposal. This is an application-bootstrap API; it
+does not require additional BTSX grammar.
+
 ### Comments and roots
 
 Lines beginning with `//` are omitted from output. A component with multiple
@@ -921,6 +942,10 @@ The current suite and release checks verify the behavior Beast claims publicly:
 
 - BTSX fixtures must match committed TSRX output byte for byte.
 - Every golden TSRX fixture must compile through Octane without diagnostics.
+- Compiled client roots must mount, update, hydrate existing nodes, activate
+  deferred boundaries, preserve portal event ancestry, and dispose owned work.
+- Behavior-only roots must honor external ownership and retain existing DOM on
+  disposal.
 - Recursive builds must mirror paths, emit a versioned manifest, and safely
   remove only stale outputs tracked by the previous manifest.
 - Mixed `.btsx` and native `.tsrx` applications must complete a production
@@ -979,7 +1004,8 @@ beast/
 │   └── octane-coverage.md       # Official-doc coverage map and roadmap
 ├── tests/
 │   ├── compiler.test.ts         # Compiler and Octane conformance tests
-│   └── project.test.ts          # Project builder and Vite tests
+│   ├── project.test.ts          # Project builder and Vite tests
+│   └── runtime.test.ts          # Client hydration, roots, portals, and behavior
 ├── package.json                 # `beast-tsrx` package and workspace root
 └── tsconfig.json
 ```

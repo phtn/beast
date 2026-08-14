@@ -30,7 +30,7 @@ through `import`, `setup`, attributes, and nesting unchanged.
 | External stores | Stable subscription/client snapshot functions and a deterministic server snapshot pass through `useSyncExternalStore` | `network` golden and SSR assertion |
 | Responsive updates | `useTransition` marks tab changes as non-urgent while `useDeferredValue` lets search results lag behind controlled input | `responsive` golden and SSR assertion |
 | View transitions | `ViewTransition` receives named enter/exit/update classes while `addTransitionType` selects a directional class map inside `startTransition` | `transitions` golden, client preload assertion, and SSR annotation assertion |
-| Portals | A module helper passes a tagless local component and its props through `createPortal` while preserving logical event ancestry | `portal` golden and SSR placeholder assertion |
+| Portals | A module helper passes a tagless local component and its props through `createPortal` while preserving logical event ancestry | `portal` golden, SSR placeholder assertion, and executable cross-container lifecycle |
 | Actions and forms | `useActionState` owns submission state, `useFormStatus` reads it below the form, `useOptimistic` stages a row, and `requestFormReset` resets after success | `actions` golden and SSR assertion |
 | Conditions | `if`, `elseif`, and `else` emit native `@if` arms | `card`, `status` goldens |
 | Keyed lists | Item/index bindings, explicit keys, and single-root key hoisting emit `@for` | `card`, `catalog`, `status` goldens |
@@ -42,6 +42,7 @@ through `import`, `setup`, attributes, and nesting unchanged.
 | Library and resources | Element creation/cloning, descriptor and children-block checks, all five `Children` methods, six resource/connection APIs, transition pseudo-element handles, and package version | `library` golden and SSR assertions plus pseudo-element/version runtime test |
 | Fragments and text holes | Explicit and automatic output fragments, text-only lines, escaping, and interpolation | `fragment`, `styling` goldens |
 | Context | Module-scoped `createContext`, dotted `Theme.Provider`, and local `use()`/`useContext()` consumers | `provider` golden |
+| Client ownership | Root mount/update/unmount, server-DOM adoption, dormant-boundary activation and event replay, synchronous/test scheduling, cross-container portals, and non-reconciling behavior ownership | Executable Happy DOM lifecycle suite |
 | Client bundling | Mixed BTSX/TSRX Vite application production build | project integration test |
 
 Every golden output is compared byte for byte and compiled with the pinned
@@ -78,17 +79,17 @@ exports are outside this user-facing scope.
 | Composition | `Fragment` | Covered | Automatic output in `fragment` and explicit source fragment in `styling` |
 | Composition | `memo`, `useCallback` | Covered | `hooks` memoized local summary and stable dispatch callback |
 | Composition | `useMemo` | Covered | `counter` golden |
-| Composition | `createPortal` | Covered | `portal` golden and SSR placeholder assertion |
+| Composition | `createPortal` | Covered | `portal` golden, SSR placeholder assertion, cross-container mount/unmount, and logical event bubbling |
 | View transitions | `ViewTransition`, `addTransitionType` | Covered | `transitions` golden and client/server assertions |
 | View transitions | `ViewTransitionPseudoElement` | Covered | Selector, `animate()`, and filtered `getAnimations()` runtime assertions |
-| Roots | `createRoot` | Partial | Creator template and Vite production build |
-| Roots | `hydrateRoot` | Planned | Full SSR-to-hydration lifecycle fixture |
-| Behavior roots | `attachBehaviorRoot` | Planned | Existing-DOM ownership and disposal fixture |
+| Roots | `createRoot` | Covered | Executable mount, state update, same-component prop update, and unmount lifecycle |
+| Roots | `hydrateRoot` | Covered | Server-rendered node adoption, effect activation, event update, and unmount lifecycle |
+| Behavior roots | `attachBehaviorRoot` | Covered | Externally owned range gating, adoption, delegated event handling, cleanup, and DOM-preserving disposal |
 | Resources | `preload`, `preinit`, `preloadModule`, `preinitModule` | Covered | `library` client passthrough, server head emission, and dedupe assertions |
 | Resources | `preconnect`, `prefetchDNS` | Covered | `library` server head assertions |
 | Descriptors | `createElement`, `cloneElement` | Covered | `library` mapped and single cloned-descriptor SSR assertions |
 | Inspection | `isValidElement`, `isChildrenBlock`, `Children` | Covered | `library` traversal counts, flattened/mapped output, `only`, and compiled children-block assertion |
-| Scheduling/testing | `flushSync`, `act` | Planned | Client root lifecycle fixture |
+| Scheduling/testing | `flushSync`, `act` | Covered | Synchronous DOM commit plus render/effect settling in the client lifecycle suite |
 | Debugging | `useDebugValue` | Covered | `hooks` client/server lowering assertion |
 | Package | `version` | Covered | Runtime export equals Beast's pinned Octane dependency |
 | Server | `renderToString` | Covered | Multiple executable server assertions |
@@ -104,19 +105,12 @@ passes the repository's release checks.
 
 ## Next additions
 
-### 1. Close client ownership and rendering gaps
-
-Cover `createRoot`, `hydrateRoot`, `flushSync`, `act`, portals, and behavior-only
-roots in executable DOM lifecycle tests rather than compilation-only examples.
-Include adoption and activation of server-rendered deferred boundaries so the
-already-covered Hydrate compiler surface is also proven end to end.
-
-### 2. Complete server and static rendering
+### 1. Complete server and static rendering
 
 Exercise buffered, Node-stream, Web-stream, await-everything, static, and
 Suspense-timeout entry points against Beast-compiled components.
 
-### 3. Close application-integration gaps
+### 2. Close application-integration gaps
 
 The Vite path has client production coverage, but still needs full lifecycle
 fixtures for server transforms, rendering, hydration, and compiler-split
@@ -125,7 +119,7 @@ After that, add Beast adapters or documented precompile workflows for Octane's
 Rspack and Rsbuild integrations. Framework-specific adapters should follow
 only when the core bundler contracts are stable.
 
-### 4. Improve compiler tooling
+### 3. Improve compiler tooling
 
 Add Beast-to-TSRX source maps and a standalone watch mode. These are not Octane
 runtime capabilities, but they are required for complete diagnostics and a
@@ -135,9 +129,9 @@ non-Vite development workflow.
 
 The smallest dependency-aware sequence is:
 
-1. Client ownership, roots, deferred activation, and behavior-only roots.
-2. Server/static rendering APIs.
-3. Rspack/Rsbuild support, source maps, and standalone watch mode.
+1. Server/static rendering APIs.
+2. Rspack/Rsbuild integration and SSR/deferred-split application lifecycles.
+3. Source maps and standalone watch mode.
 
 [Quick start]: https://octanejs.dev/docs
 [Core APIs]: https://octanejs.dev/docs/core-apis
