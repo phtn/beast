@@ -189,7 +189,14 @@ async function setupTailwind(target: string): Promise<void> {
   );
 
   const stylePath = resolve(target, "src/style.css");
-  await writeFile(stylePath, `@import "tailwindcss";\n`, "utf8");
+  let existing = "";
+  try {
+    existing = await readFile(stylePath, "utf8");
+  } catch {
+    existing = "";
+  }
+  const cleaned = existing.replace(/^\uFEFF?@import "tailwindcss";\s*\n?/, "");
+  await writeFile(stylePath, `@import "tailwindcss";\n${cleaned}`, "utf8");
 }
 
 function normalizePackageName(name: string): string {

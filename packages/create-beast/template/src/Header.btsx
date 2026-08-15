@@ -1,0 +1,14 @@
+import type {HeaderProps} from './types'
+
+
+props { source, direction, output }: HeaderProps
+main.header
+  h1(className='flex items-center justify-center')
+    div(className='-skew-6 w-28 md:w-64 text-end')
+      span(className='text-4xl') #{source}
+    div(className='flex items-start justify-center h-20 w-16 md:w-48')
+      div(className='bg-mist-700 size-10 md:w-10 aspect-square flex items-center justify-center rotate-45 rounded-lg')
+        span(className='font-medium text-3xl md:text-5xl relative px-8 -rotate-45') #{direction}
+    div(className='skew-6 w-28 md:w-64 text-start')
+      span(className='text-4xl') #{output}
+
