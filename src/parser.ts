@@ -20,6 +20,7 @@ import type {
   TryNode,
   TryPendingBranch,
 } from "./ast.js";
+import { decodeHTML } from "entities";
 import { BeastCompileError } from "./diagnostics.js";
 
 interface LogicalLine {
@@ -1033,7 +1034,7 @@ function parseAttributes(
       attrs.push({
         kind: "attribute",
         name,
-        value: { type: "string", value },
+        value: { type: "string", value: decodeHTML(value) },
         span: attributeSpan(line, columnOffset + start, columnOffset + cursor),
       });
       continue;
@@ -1085,10 +1086,10 @@ function parseTextSpans(text: string, line: LogicalLine, filename: string): Text
   while (cursor < text.length) {
     const opening = text.indexOf("#{", cursor);
     if (opening === -1) {
-      if (cursor < text.length) spans.push({ type: "literal", text: text.slice(cursor) });
+      if (cursor < text.length) spans.push({ type: "literal", text: decodeHTML(text.slice(cursor)) });
       break;
     }
-    if (opening > cursor) spans.push({ type: "literal", text: text.slice(cursor, opening) });
+    if (opening > cursor) spans.push({ type: "literal", text: decodeHTML(text.slice(cursor, opening)) });
     const close = findMatchingDelimiter(text, opening + 1);
     if (close === -1) {
       throw new BeastCompileError({

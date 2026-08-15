@@ -304,7 +304,9 @@ function generateAttributes(node: ElementNode, document: BeastDocument): string 
 function generateClassAttribute(attr: NamedAttr, shorthand: string): string {
   if (attr.value.type === "string") {
     const combined = [shorthand, attr.value.value].filter(Boolean).join(" ");
-    return `className=${JSON.stringify(combined)}`;
+    const serialized = JSON.stringify(combined);
+    if (combined.includes('"')) return `className={${serialized}}`;
+    return `className=${serialized}`;
   }
   if (attr.value.type === "expr") {
     if (shorthand.length === 0) return `className={${attr.value.code}}`;
@@ -318,8 +320,15 @@ function generateAttribute(attr: NamedAttr): string {
   switch (attr.value.type) {
     case "bool":
       return name;
-    case "string":
-      return `${name}=${JSON.stringify(attr.value.value)}`;
+    case "string": {
+      const serialized = JSON.stringify(attr.value.value);
+      // JSX string literals in TSRX cannot contain escaped double-quotes (\"), which
+      // would be produced by JSON.stringify for values containing ". After entity
+      // decoding, &quot; becomes a raw double-quote. Emit as an expression to keep
+      // the TSRX valid and let Octane escape it to &quot; on the server.
+      if (attr.value.value.includes('"')) return `${name}={${serialized}}`;
+      return `${name}=${serialized}`;
+    }
     case "expr":
       return `${name}={${attr.value.code}}`;
   }
@@ -332,12 +341,11 @@ function generateText(spans: TextSpan[]): string {
 }
 
 function escapeTemplateText(value: string): string {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll("{", "&#123;")
-    .replaceAll("}", "&#125;");
+  if (value.includes("<") || value.includes(">") || value.includes("{") || value.includes("}")) {
+    const escaped = value.replaceAll("\\", "\\\\").replaceAll("'", "\\'").replaceAll("\n", "\\n");
+    return "{'" + escaped + "'}";
+  }
+  return value;
 }
 
 function indent(depth: number): string {

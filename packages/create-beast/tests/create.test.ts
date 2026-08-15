@@ -51,9 +51,46 @@ describe("create-beast", () => {
     expect(await readFile(resolve(result.directory, "vite.config.ts"), "utf8")).toContain(
       "plugins: [beastOctane()]",
     );
+    expect(await readFile(resolve(result.directory, "src/style.css"), "utf8")).not.toContain(
+      "@import \"tailwindcss\"",
+    );
+    expect(await readFile(resolve(result.directory, "src/style.css"), "utf8")).not.toContain(
+      "@import 'tailwindcss'",
+    );
     const main = await readFile(resolve(result.directory, "src", "main.ts"), "utf8");
     expect(main).toContain("links");
     expect(main).toContain("Beast → Octane");
+  });
+
+  test("creates a Tailwind project with dedicated template", async () => {
+    const cwd = await temporaryDirectory();
+    const result = await createProject({
+      cwd,
+      directory: "my-tailwind-app",
+      install: false,
+      git: false,
+      tailwind: true,
+      compilerSpec: "file:/local/beast-tsrx.tgz",
+    });
+
+    expect(result.packageName).toBe("my-tailwind-app");
+    const packageJson = JSON.parse(
+      await readFile(resolve(result.directory, "package.json"), "utf8"),
+    ) as { devDependencies: Record<string, string> };
+    expect(packageJson.devDependencies["tailwindcss"]).toBe("^4.1.8");
+    expect(packageJson.devDependencies["@tailwindcss/vite"]).toBe("^4.1.8");
+    const viteConfig = await readFile(resolve(result.directory, "vite.config.ts"), "utf8");
+    expect(viteConfig).toContain('import tailwindcss from "@tailwindcss/vite"');
+    expect(viteConfig).toContain("plugins: [tailwindcss(), beastOctane()]");
+    const style = await readFile(resolve(result.directory, "src/style.css"), "utf8");
+    expect(style).toContain('@import "tailwindcss"');
+    const app = await readFile(resolve(result.directory, "src", "App.btsx"), "utf8");
+    expect(app).toContain("props { source, direction, output, links }: Props");
+    expect(app).toContain("Header(source=");
+    expect(app).toContain("flex flex-col");
+    const header = await readFile(resolve(result.directory, "src/Header.btsx"), "utf8");
+    expect(header).toContain("props { source, direction, output }: HeaderProps");
+    expect(header).toContain("-skew-6");
   });
 
   test("refuses a non-empty directory unless force is explicit", async () => {

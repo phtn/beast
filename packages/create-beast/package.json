@@ -1,6 +1,6 @@
 {
   "name": "create-beast",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "description": "Create a Beast and Octane TSRX project.",
   "type": "module",
   "main": "./dist/index.js",
@@ -17,6 +17,7 @@
   "files": [
     "dist",
     "template",
+    "template-tailwind",
     "README.md",
     "LICENSE"
   ],

@@ -1,14 +1,16 @@
-import Header from './Header.btsx'
-import type {Props} from './types'
+module
+  interface Props {
+    title: string;
+    links: { id: string, label: string, url: string }[]
+  }
 
-props { source, direction, output, links }: Props
+props { title, links }: Props
 main.app
-  Header(source={source} direction={direction} output={output})
-  div(className='flex flex-col items-center justify-center mt-10')
-    p Start building in
-      span.arrow →
-      code src/App.btsx.
-    div.flex
-      each link in links key link.id
-        a.button(id={link.id} className='w-36 text-center flex justify-center' href={link.url} target="_blank" rel="noreferrer") #{link.label}
-
+  p.eyebrow BTSX → TSRX → Octane
+  h1 #{title}
+  p Start building in
+    span.arrow →
+    code src/App.btsx.
+  div.flex
+    each link in links key link.id
+      a.button(id={link.id} href={link.url} target="_blank" rel="noreferrer") #{link.label}

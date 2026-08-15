@@ -11,4 +11,4 @@ const links = [
   { id: 'octane', label: 'Octane JS', url: 'https://octanejs.dev' }
 ]
 
-createRoot(container).render(App, { title: 'Beast → Octane', links })
+createRoot(container).render(App, { source: 'Beast', direction: '→', output: ' Octane', links })

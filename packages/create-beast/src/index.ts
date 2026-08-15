@@ -9,6 +9,10 @@ import { fileURLToPath } from "node:url";
 const DEFAULT_DIRECTORY = "beast-app";
 const DEFAULT_COMPILER_SPEC = "latest";
 const TEMPLATE_DIRECTORY = resolve(dirname(fileURLToPath(import.meta.url)), "../template");
+const TEMPLATE_TAILWIND_DIRECTORY = resolve(
+  dirname(fileURLToPath(import.meta.url)),
+  "../template-tailwind",
+);
 
 const HELP = `Create Beast — scaffold a Beast, Octane, and Vite project
 
@@ -52,13 +56,12 @@ export async function createProject(
   const target = resolve(cwd, requestedDirectory);
   const packageName = normalizePackageName(basename(target));
   await prepareTarget(target, options.force === true);
-  await copyTemplate(TEMPLATE_DIRECTORY, target, {
+  const templateSource =
+    options.tailwind === true ? TEMPLATE_TAILWIND_DIRECTORY : TEMPLATE_DIRECTORY;
+  await copyTemplate(templateSource, target, {
     "__PROJECT_NAME__": packageName,
     "__BEAST_PACKAGE_SPEC__": options.compilerSpec ?? DEFAULT_COMPILER_SPEC,
   });
-  if (options.tailwind === true) {
-    await setupTailwind(target);
-  }
 
   let gitInitialized = false;
   if (options.git !== false && (await runCommand("git", ["--version"], cwd, "ignore")) === 0) {
