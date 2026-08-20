@@ -1,8 +1,9 @@
 import { basename, extname } from "node:path";
 import type { BeastDocument } from "./ast.js";
-import { generateTsrx } from "./codegen.js";
+import { generateTsrxResult } from "./codegen.js";
 import type { BeastDiagnostic } from "./diagnostics.js";
 import { parse } from "./parser.js";
+import type { BeastSourceMap } from "./source-map.js";
 
 export interface CompileOptions {
   filename?: string;
@@ -12,6 +13,7 @@ export interface CompileOptions {
 
 export interface CompileResult {
   code: string;
+  map: BeastSourceMap;
   ast: BeastDocument;
   diagnostics: BeastDiagnostic[];
 }
@@ -23,11 +25,11 @@ export function compileBeastResult(
   const filename = options.filename ?? "component.btsx";
   const componentName = options.componentName ?? componentNameFromPath(filename);
   const ast = parse(source, filename);
-  const code = generateTsrx(ast, {
+  const generated = generateTsrxResult(ast, source, {
     componentName,
     ...(options.propsParam === undefined ? {} : { propsParam: options.propsParam }),
   });
-  return { code, ast, diagnostics: [] };
+  return { code: generated.code, map: generated.map, ast, diagnostics: [] };
 }
 
 export function compileBeast(source: string, options: CompileOptions = {}): string {

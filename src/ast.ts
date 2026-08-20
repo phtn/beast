@@ -46,6 +46,7 @@ export interface ImportDeclaration extends BaseNode {
 export interface ModuleDeclaration extends BaseNode {
   kind: "module";
   code: string;
+  codeStart: SourcePosition;
 }
 
 export interface PropsDeclaration extends BaseNode {
@@ -56,6 +57,7 @@ export interface PropsDeclaration extends BaseNode {
 export interface SetupDeclaration extends BaseNode {
   kind: "setup";
   code: string;
+  codeStart: SourcePosition;
 }
 
 export interface ComponentDeclaration extends BaseNode {
@@ -97,6 +99,7 @@ export interface FragmentNode extends BaseNode {
 export interface StyleNode extends BaseNode {
   kind: "style";
   css: string;
+  codeStart: SourcePosition;
 }
 
 export interface IfBranch {

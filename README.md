@@ -862,6 +862,8 @@ integration. HMR invalidation is forwarded for `.btsx` changes, and SSR
 transforms select Octane's server environment. Compiler-split `Hydrate`
 children re-enter their originating `.btsx` module through Octane's resource
 query, so production builds can emit and activate the deferred chunk normally.
+Beast's node- and declaration-level source map is composed through Octane, so
+Vite diagnostics and production maps point back to the original `.btsx` file.
 
 The `components` option remains available for per-file `componentName` and
 `propsParam` overrides. Source-level props are preferred when a component owns
@@ -897,7 +899,9 @@ The adapter compiles `.btsx`, leaves native `.tsrx` and compiler-owned helper
 modules to Octane, selects client or server output from the Rspack target, and
 registers source dependencies with Rspack's cache and watcher. Its `.tsrx`
 extension fallback resolves compiler-split hydration requests back to the
-originating `.btsx` module while preferring a real native `.tsrx` file.
+originating `.btsx` module while preferring a real native `.tsrx` file. Rspack
+receives the same composed BTSX-to-JavaScript source map, including any input
+map supplied by an earlier loader.
 
 `beast()` and `BeastRspackPlugin` are also exported for configurations that
 already install `OctaneRspackPlugin` themselves.
@@ -948,7 +952,7 @@ const result = compileBeastResult(source, {
   filename: "Card.btsx",
 });
 
-console.log(result.ast, result.code, result.diagnostics);
+console.log(result.ast, result.code, result.map, result.diagnostics);
 ```
 
 ### Build a project
@@ -978,7 +982,7 @@ root. The same shape is accepted by the Vite integration.
 | Export | Purpose |
 | --- | --- |
 | `compileBeast()` | Compile BTSX source and return TSRX code |
-| `compileBeastResult()` | Return generated code, the source-located AST, and diagnostics |
+| `compileBeastResult()` | Return generated code, its version 3 source map, the source-located AST, and diagnostics |
 | `parse()` | Parse BTSX into the public Beast AST |
 | `componentNameFromPath()` | Derive and sanitize a component identifier from a path |
 | `buildBeastProject()` | Compile and validate a recursive source tree |
@@ -1061,6 +1065,7 @@ beast/
 │   ├── codegen.ts               # Beast AST to native TSRX
 │   ├── compiler.ts              # Public compilation entry points
 │   ├── diagnostics.ts           # Structured errors and formatting
+│   ├── source-map.ts            # Version 3 map composition
 │   ├── project.ts               # Recursive source-tree builder
 │   ├── vite.ts                  # Beast and Octane Vite integration
 │   ├── rspack.ts                # Beast and Octane Rspack integration
@@ -1151,8 +1156,6 @@ Current limitations:
 
 - The CLI builder has no per-file configuration file; use the programmatic API
   or Vite component options.
-- Beast-to-TSRX source maps are not implemented. Vite currently returns
-  Octane's map for the generated TSRX layer.
 - Standalone watch mode is not implemented; Vite owns watched application
   builds.
 - Embedded expressions are preserved as source slices rather than parsed into

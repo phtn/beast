@@ -7,7 +7,9 @@ import { version, ViewTransitionPseudoElement } from 'octane'
 import { compile } from 'octane/compiler'
 import { initializeHydrationEventCapture } from 'octane/hydration'
 import { renderToString } from 'octane/server'
+import { eachMapping, originalPositionFor, TraceMap } from '@jridgewell/trace-mapping'
 import { BeastCompileError, compileBeast, compileBeastResult, componentNameFromPath } from '../src/index.js'
+import { composeSourceMaps } from '../src/source-map.js'
 
 function getCompileError(source: string, filename = 'Invalid.btsx'): BeastCompileError {
   try {
@@ -91,6 +93,106 @@ describe('BTSX to TSRX', () => {
         { kind: 'spread', code: 'overrides' }
       ])
     }
+  })
+
+  test('maps generated TSRX nodes and attributes back to BTSX', () => {
+    const filename = '/project/src/App.btsx'
+    const source = [
+      'import { useState } from "octane";',
+      'props { title }: { title: string }',
+      'main.app(role="main")',
+      '  h1 #{title}',
+      '  if title',
+      '    span Yes',
+      '  else',
+      '    span No'
+    ].join('\n') + '\n'
+    const result = compileBeastResult(source, { filename })
+    const map = new TraceMap(result.map)
+
+    expect(result.map).toMatchObject({
+      version: 3,
+      file: '/project/src/App.tsrx',
+      sources: [filename],
+      sourcesContent: [source],
+      names: []
+    })
+    expect(originalPositionFor(map, { line: 4, column: 23 })).toMatchObject({
+      source: filename,
+      line: 3,
+      column: 9
+    })
+    expect(originalPositionFor(map, { line: 5, column: 2 })).toMatchObject({
+      source: filename,
+      line: 4,
+      column: 2
+    })
+    expect(originalPositionFor(map, { line: 8, column: 4 })).toMatchObject({
+      source: filename,
+      line: 7,
+      column: 2
+    })
+  })
+
+  test('composes Octane output locations through generated TSRX to BTSX', () => {
+    const filename = '/project/src/App.btsx'
+    const source = [
+      'import { useState } from "octane";',
+      'props { title }: { title: string }',
+      'main',
+      '  h1 #{title}'
+    ].join('\n') + '\n'
+    const beast = compileBeastResult(source, { filename })
+    const octane = compile(beast.code, '/project/src/App.tsrx', {
+      mode: 'client',
+      hmr: false
+    })
+    const composed = composeSourceMaps(octane.map, beast.map)
+    if (composed === null) throw new Error('Expected Octane to emit a source map.')
+
+    const mappings: Array<{ source: string | null; originalLine: number | null }> = []
+    eachMapping(new TraceMap(composed), (mapping) => mappings.push(mapping))
+    expect(composed.sources).toEqual([filename])
+    expect(composed.sourcesContent).toEqual([source])
+    expect(mappings.some((mapping) => mapping.source === filename && mapping.originalLine === 4))
+      .toBe(true)
+  })
+
+  test('maps multiline module, setup, and style bodies to their authored lines', () => {
+    const filename = '/project/src/Embedded.btsx'
+    const source = [
+      'module',
+      '  const answer = 42;',
+      'setup',
+      '  const value = answer;',
+      '  if (value) {',
+      '    console.log(value);',
+      '  }',
+      'fragment',
+      '  style',
+      '    .card {',
+      '      color: red;',
+      '    }',
+      '  div.card'
+    ].join('\n') + '\n'
+    const result = compileBeastResult(source, { filename })
+    const generatedLines = result.code.split('\n')
+    const map = new TraceMap(result.map)
+    const originalFor = (text: string) => {
+      const lineIndex = generatedLines.findIndex((line) => line.includes(text))
+      if (lineIndex === -1) throw new Error(`Missing generated line containing ${text}.`)
+      const line = generatedLines[lineIndex] ?? ''
+      return originalPositionFor(map, {
+        line: lineIndex + 1,
+        column: line.search(/\S/u)
+      })
+    }
+
+    expect(originalFor('const answer')).toMatchObject({ line: 2, column: 2 })
+    expect(originalFor('const value')).toMatchObject({ line: 4, column: 2 })
+    expect(originalFor('console.log')).toMatchObject({ line: 6, column: 4 })
+    expect(originalFor('.card {')).toMatchObject({ line: 10, column: 4 })
+    expect(originalFor('color: red')).toMatchObject({ line: 11, column: 6 })
   })
 
   test('emits explicit fragments and verbatim scoped style blocks', async () => {

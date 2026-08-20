@@ -11,6 +11,7 @@ import type {
   IfNode,
   PropsDeclaration,
   SetupDeclaration,
+  SourcePosition,
   SourceSpan,
   StyleNode,
   SwitchBranch,
@@ -30,6 +31,11 @@ interface LogicalLine {
   offset: number;
 }
 
+interface SourceBlockResult {
+  code: string;
+  start: SourcePosition;
+}
+
 const IDENTIFIER = /^[A-Za-z_$][A-Za-z0-9_$]*$/u;
 const COMPONENT_IDENTIFIER = /^[A-Z_$][A-Za-z0-9_$]*$/u;
 
@@ -43,6 +49,7 @@ export function parse(source: string, filename = "<input>"): BeastDocument {
 class Parser {
   private index = 0;
   private readonly physicalLines: string[];
+  private readonly physicalLineOffsets: number[];
 
   constructor(
     private readonly lines: LogicalLine[],
@@ -50,6 +57,12 @@ class Parser {
     private readonly filename: string,
   ) {
     this.physicalLines = source.split("\n");
+    this.physicalLineOffsets = [];
+    let offset = 0;
+    for (const physicalLine of this.physicalLines) {
+      this.physicalLineOffsets.push(offset);
+      offset += physicalLine.length + 1;
+    }
   }
 
   parseDocument(): BeastDocument {
@@ -134,17 +147,18 @@ class Parser {
       }
 
       if (isModuleDeclaration(line.content)) {
-        const code =
+        const source =
           line.content === "module"
             ? this.parseSourceBlock(
                 line,
                 "BEAST1506_EMPTY_MODULE",
                 "A module block requires indented TypeScript source.",
               )
-            : line.content.slice("module".length).trim();
+            : inlineSource(line, "module");
         declarations.push({
           kind: "module",
-          code,
+          code: source.code,
+          codeStart: source.start,
           lineNo: line.lineNo,
           span: lineSpan(line),
         });
@@ -252,58 +266,73 @@ class Parser {
   }
 
   private parseSetupDeclaration(line: LogicalLine): SetupDeclaration {
-    const code =
+    const source =
       line.content === "setup"
         ? this.parseSourceBlock(
             line,
             "BEAST1505_EMPTY_SETUP",
             "A setup block requires indented TypeScript source.",
           )
-        : line.content.slice("setup".length).trim();
+        : inlineSource(line, "setup");
     if (line.content !== "setup") this.index += 1;
     return {
       kind: "setup",
-      code,
+      code: source.code,
+      codeStart: source.start,
       lineNo: line.lineNo,
       span: lineSpan(line),
     };
   }
 
-  private parseSourceBlock(line: LogicalLine, code: string, message: string): string {
-    const blockLines: string[] = [];
+  private parseSourceBlock(
+    line: LogicalLine,
+    code: string,
+    message: string,
+  ): SourceBlockResult {
+    const blockLines: Array<{ raw: string; lineIndex: number }> = [];
     let physicalIndex = line.lineNo;
 
     while (physicalIndex < this.physicalLines.length) {
       const raw = this.physicalLines[physicalIndex] ?? "";
       if (raw.trim().length === 0) {
-        blockLines.push("");
+        blockLines.push({ raw: "", lineIndex: physicalIndex });
         physicalIndex += 1;
         continue;
       }
 
       const leading = raw.match(/^ */u)?.[0].length ?? 0;
       if (leading <= line.indent) break;
-      blockLines.push(raw.trimEnd());
+      blockLines.push({ raw: raw.trimEnd(), lineIndex: physicalIndex });
       physicalIndex += 1;
     }
 
-    while (blockLines[0] === "") blockLines.shift();
-    while (blockLines.at(-1) === "") blockLines.pop();
+    while (blockLines[0]?.raw === "") blockLines.shift();
+    while (blockLines.at(-1)?.raw === "") blockLines.pop();
     if (blockLines.length === 0) this.fail(code, message, line);
 
     const sourceIndent = Math.min(
       ...blockLines
-        .filter((blockLine) => blockLine.length > 0)
-        .map((blockLine) => blockLine.match(/^ */u)?.[0].length ?? 0),
+        .filter((blockLine) => blockLine.raw.length > 0)
+        .map((blockLine) => blockLine.raw.match(/^ */u)?.[0].length ?? 0),
     );
     const sourceCode = blockLines
-      .map((blockLine) => (blockLine.length === 0 ? "" : blockLine.slice(sourceIndent)))
+      .map((blockLine) =>
+        blockLine.raw.length === 0 ? "" : blockLine.raw.slice(sourceIndent),
+      )
       .join("\n");
 
     while ((this.lines[this.index]?.lineNo ?? Infinity) <= physicalIndex) {
       this.index += 1;
     }
-    return sourceCode;
+    const firstLineIndex = blockLines[0]?.lineIndex ?? line.lineNo;
+    return {
+      code: sourceCode,
+      start: {
+        offset: (this.physicalLineOffsets[firstLineIndex] ?? 0) + sourceIndent,
+        line: firstLineIndex + 1,
+        column: sourceIndent + 1,
+      },
+    };
   }
 
   private parseBlock(indent: number): BeastNode[] {
@@ -410,14 +439,15 @@ class Parser {
   }
 
   private parseStyle(line: LogicalLine): StyleNode {
-    const css = this.parseSourceBlock(
+    const source = this.parseSourceBlock(
       line,
       "BEAST1902_EMPTY_STYLE",
       "A style block requires indented CSS source.",
     );
     return {
       kind: "style",
-      css,
+      css: source.code,
+      codeStart: source.start,
       lineNo: line.lineNo,
       span: lineSpan(line),
     };
@@ -846,6 +876,19 @@ function isPropsDeclaration(content: string): boolean {
 
 function isSetupDeclaration(content: string): boolean {
   return content === "setup" || /^setup\s/u.test(content);
+}
+
+function inlineSource(line: LogicalLine, keyword: "module" | "setup"): SourceBlockResult {
+  const code = line.content.slice(keyword.length).trim();
+  const relativeOffset = line.content.indexOf(code, keyword.length);
+  return {
+    code,
+    start: {
+      offset: line.offset + relativeOffset,
+      line: line.lineNo,
+      column: line.indent + relativeOffset + 1,
+    },
+  };
 }
 
 function isPendingBranch(content: string): boolean {

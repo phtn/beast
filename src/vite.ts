@@ -5,8 +5,9 @@ import {
   type OctaneVitePluginOptions,
 } from "octane/compiler/vite";
 import type { Plugin, PluginOption, ResolvedConfig } from "vite";
-import { compileBeast, componentNameFromPath } from "./compiler.js";
+import { compileBeastResult, componentNameFromPath } from "./compiler.js";
 import type { ProjectComponentOptions } from "./project.js";
+import { composeSourceMaps } from "./source-map.js";
 
 export interface BeastViteOptions {
   components?: Readonly<Record<string, ProjectComponentOptions>>;
@@ -54,14 +55,14 @@ export function beast(options: BeastViteOptions = {}): Plugin {
 
       const projectName = toPosix(relative(config.root, filename));
       const configured = options.components?.[projectName];
-      const tsrx = compileBeast(source, {
+      const tsrx = compileBeastResult(source, {
         filename,
         componentName: configured?.componentName ?? componentNameFromPath(filename),
         ...(configured?.propsParam === undefined ? {} : { propsParam: configured.propsParam }),
       });
       const tsrxId = `${filename.replace(/\.btsx$/u, ".tsrx")}${id.slice(filename.length)}`;
       const environment = transformOptions?.ssr === true ? "server" : "client";
-      const result = octaneCompiler.transform(tsrx, tsrxId, {
+      const result = octaneCompiler.transform(tsrx.code, tsrxId, {
         environment,
         hmr: environment === "client" && config.command === "serve" ? "vite" : false,
         dev: config.command === "serve",
@@ -71,7 +72,7 @@ export function beast(options: BeastViteOptions = {}): Plugin {
       if (result === null) {
         throw new Error(`Octane declined to compile generated TSRX for ${projectName}.`);
       }
-      return { code: result.code, map: result.map as never };
+      return { code: result.code, map: composeSourceMaps(result.map, tsrx.map) as never };
     },
     handleHotUpdate(context) {
       if (context.file.endsWith(".btsx")) octaneCompiler?.invalidate(context.file);

@@ -3,8 +3,9 @@ import { isAbsolute, relative, resolve, sep } from "node:path";
 import { inferRspackEnvironment } from "@octanejs/rspack-plugin";
 import type { LoaderDefinition, RawSourceMap } from "@rspack/core";
 import { createOctaneCompiler } from "octane/compiler/bundler";
-import { compileBeast, componentNameFromPath } from "./compiler.js";
+import { compileBeastResult, componentNameFromPath } from "./compiler.js";
 import type { ProjectComponentOptions } from "./project.js";
+import { composeSourceMaps } from "./source-map.js";
 
 interface BeastRspackLoaderOptions {
   root?: string;
@@ -49,7 +50,7 @@ const beastRspackLoader: LoaderDefinition<BeastRspackLoaderOptions> = function (
     const profile = environment === "client" && octane.profile === true;
     const projectName = toPosix(relative(root, filename));
     const configured = options.components?.[projectName];
-    const tsrx = compileBeast(String(source), {
+    const tsrx = compileBeastResult(String(source), {
       filename,
       componentName: configured?.componentName ?? componentNameFromPath(filename),
       ...(configured?.propsParam === undefined ? {} : { propsParam: configured.propsParam }),
@@ -72,7 +73,7 @@ const beastRspackLoader: LoaderDefinition<BeastRspackLoaderOptions> = function (
         : { universalRuntime: octane.universalRuntime }),
       warn: (message) => this.emitWarning?.(new Error(message)),
     });
-    const result = compiler.transform(tsrx, tsrxId, {
+    const result = compiler.transform(tsrx.code, tsrxId, {
       environment,
       hmr,
       dev,
@@ -94,7 +95,8 @@ const beastRspackLoader: LoaderDefinition<BeastRspackLoaderOptions> = function (
       result.code,
       this.sourceMap === false
         ? undefined
-        : ((result.map ?? inputSourceMap) as RawSourceMap | undefined),
+        : (composeSourceMaps(result.map, tsrx.map, inputSourceMap) as RawSourceMap | null) ??
+          undefined,
     );
   } catch (error) {
     callback(error instanceof Error ? error : new Error(String(error)));

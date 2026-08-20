@@ -5,9 +5,12 @@
     "": {
       "name": "beast-tsrx",
       "dependencies": {
+        "@jridgewell/gen-mapping": "^0.3.13",
+        "@jridgewell/remapping": "^2.3.5",
         "entities": "^7.0.1",
       },
       "devDependencies": {
+        "@jridgewell/trace-mapping": "^0.3.31",
         "@octanejs/rsbuild-plugin": "0.1.32",
         "@octanejs/rspack-plugin": "0.1.32",
         "@rsbuild/core": "2.1.13",

@@ -167,9 +167,25 @@ describe("project building", () => {
       root,
       logLevel: "silent",
       plugins: [beastOctane()],
+      build: { sourcemap: true },
     });
 
     expect(await readFile(resolve(root, "dist", "index.html"), "utf8")).toContain("/assets/");
+    const outputFiles = await readdir(resolve(root, "dist"), { recursive: true });
+    const sourceMaps = await Promise.all(
+      outputFiles.filter((file) => file.endsWith(".js.map"))
+        .map(async (file) => JSON.parse(await readFile(resolve(root, "dist", file), "utf8")) as {
+          sources: string[];
+          sourcesContent?: Array<string | null>;
+        }),
+    );
+    const beastMap = sourceMaps.find((map) =>
+      map.sources.some((source) => source.endsWith("/src/App.btsx")),
+    );
+    expect(beastMap).toBeDefined();
+    expect(beastMap?.sources.some((source) => source.endsWith("/src/App.tsrx"))).toBe(false);
+    expect(beastMap?.sourcesContent?.some((source) => source?.includes("h1 #{title}")))
+      .toBe(true);
   });
 
   test("Vite renders an SSR build and hydrates a compiler-split BTSX boundary", async () => {

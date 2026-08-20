@@ -1,3 +1,4 @@
+import { addSegment, GenMapping, setSourceContent, toEncodedMap } from "@jridgewell/gen-mapping";
 import type {
   BeastDocument,
   BeastNode,
@@ -7,6 +8,7 @@ import type {
   FragmentNode,
   IfNode,
   NamedAttr,
+  SourcePosition,
   StyleNode,
   SwitchNode,
   SetupDeclaration,
@@ -14,15 +16,80 @@ import type {
   TryNode,
 } from "./ast.js";
 import { BeastCompileError } from "./diagnostics.js";
+import type { BeastSourceMap } from "./source-map.js";
 
 export interface GenerateOptions {
   componentName: string;
   propsParam?: string;
 }
 
+export interface GenerateResult {
+  code: string;
+  map: BeastSourceMap;
+}
+
+interface GeneratedMapping {
+  column: number;
+  source: SourcePosition;
+}
+
+interface GeneratedLine {
+  code: string;
+  mappings: GeneratedMapping[];
+}
+
+interface GeneratedChunk {
+  code: string;
+  mappings: GeneratedMapping[];
+}
+
 const PRINT_WIDTH = 80;
 
 export function generateTsrx(document: BeastDocument, options: GenerateOptions): string {
+  return generateLines(document, options).map((line) => line.code).join("\n") + "\n";
+}
+
+export function generateTsrxResult(
+  document: BeastDocument,
+  source: string,
+  options: GenerateOptions,
+): GenerateResult {
+  const lines = generateLines(document, options);
+  const code = `${lines.map((line) => line.code).join("\n")}\n`;
+  const generatedFilename = document.filename.endsWith(".btsx")
+    ? document.filename.replace(/\.btsx$/u, ".tsrx")
+    : `${document.filename}.tsrx`;
+  const builder = new GenMapping({ file: generatedFilename });
+  setSourceContent(builder, document.filename, source);
+  for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
+    const line = lines[lineIndex];
+    if (line === undefined) continue;
+    for (const mapping of line.mappings) {
+      addSegment(
+        builder,
+        lineIndex,
+        mapping.column,
+        document.filename,
+        mapping.source.line - 1,
+        mapping.source.column - 1,
+      );
+    }
+  }
+  const encoded = toEncodedMap(builder);
+  return {
+    code,
+    map: {
+      version: 3,
+      file: generatedFilename,
+      sources: [...encoded.sources],
+      sourcesContent: [...(encoded.sourcesContent ?? [])],
+      names: [...encoded.names],
+      mappings: encoded.mappings,
+    },
+  };
+}
+
+function generateLines(document: BeastDocument, options: GenerateOptions): GeneratedLine[] {
   if (!/^[A-Za-z_$][A-Za-z0-9_$]*$/u.test(options.componentName)) {
     throw new BeastCompileError({
       code: "BEAST2001_INVALID_COMPONENT_NAME",
@@ -39,13 +106,22 @@ export function generateTsrx(document: BeastDocument, options: GenerateOptions):
   const localComponents = document.declarations.filter(
     (declaration): declaration is ComponentDeclaration => declaration.kind === "component",
   );
-  const lines: string[] = [];
+  const lines: GeneratedLine[] = [];
   for (const declaration of document.declarations) {
     if (declaration.kind === "import" || declaration.kind === "module") {
-      lines.push(...declaration.code.split("\n"));
+      lines.push(
+        ...declaration.code.split("\n").map((code, index) =>
+          mappedLine(
+            code,
+            declaration.kind === "module"
+              ? embeddedPosition(declaration.codeStart, index, code)
+              : declaration.span.start,
+          ),
+        ),
+      );
     }
   }
-  if (lines.length > 0) lines.push("");
+  if (lines.length > 0) lines.push(unmappedLine(""));
 
   for (const component of localComponents) {
     lines.push(
@@ -56,11 +132,14 @@ export function generateTsrx(document: BeastDocument, options: GenerateOptions):
         component.children,
         false,
         document,
+        component.span.start,
       ),
     );
-    lines.push("");
+    lines.push(unmappedLine(""));
   }
 
+  const rootSource =
+    sourceProps?.span.start ?? document.children[0]?.span.start ?? document.span.start;
   lines.push(
     ...generateComponent(
       options.componentName,
@@ -69,9 +148,10 @@ export function generateTsrx(document: BeastDocument, options: GenerateOptions):
       document.children,
       true,
       document,
+      rootSource,
     ),
   );
-  return `${lines.join("\n")}\n`;
+  return lines;
 }
 
 function generateComponent(
@@ -81,38 +161,47 @@ function generateComponent(
   children: readonly BeastNode[],
   exportDefault: boolean,
   document: BeastDocument,
-): string[] {
-  const lines = generateComponentOpening(componentName, parameter, exportDefault);
+  source: SourcePosition,
+): GeneratedLine[] {
+  const lines = generateComponentOpening(componentName, parameter, exportDefault)
+    .map((code) => mappedLine(code, source));
   if (setup.length > 0) {
     for (const declaration of setup) {
-      for (const codeLine of declaration.code.split("\n")) {
-        lines.push(codeLine.length === 0 ? "" : `${indent(1)}${codeLine}`);
+      for (const [index, codeLine] of declaration.code.split("\n").entries()) {
+        lines.push(
+          codeLine.length === 0
+            ? unmappedLine("")
+            : mappedLine(
+                `${indent(1)}${codeLine}`,
+                embeddedPosition(declaration.codeStart, index, codeLine),
+              ),
+        );
       }
     }
-    lines.push("");
+    lines.push(unmappedLine(""));
   }
   const rootNeedsFragment =
     children.length !== 1 ||
     children[0]?.kind === "text" ||
     children[0]?.kind === "style";
   if (rootNeedsFragment) {
-    lines.push(`${indent(1)}<>`);
+    lines.push(mappedLine(`${indent(1)}<>`, source));
     for (const child of children) lines.push(...generateNode(child, 2, document));
-    lines.push(`${indent(1)}</>`);
+    lines.push(mappedLine(`${indent(1)}</>`, source));
   } else {
     const child = children[0];
     if (child !== undefined) lines.push(...generateNode(child, 1, document));
   }
-  lines.push("}");
+  lines.push(mappedLine("}", source));
   return lines;
 }
 
-function generateNode(node: BeastNode, depth: number, document: BeastDocument): string[] {
+function generateNode(node: BeastNode, depth: number, document: BeastDocument): GeneratedLine[] {
   switch (node.kind) {
     case "element":
       return generateElement(node, depth, document);
     case "text":
-      return [`${indent(depth)}${generateText(node.spans)}`];
+      return [mappedLine(`${indent(depth)}${generateText(node.spans)}`, node.span.start)];
     case "fragment":
       return generateFragment(node, depth, document);
     case "style":
@@ -132,19 +221,26 @@ function generateFragment(
   node: FragmentNode,
   depth: number,
   document: BeastDocument,
-): string[] {
-  const lines = [`${indent(depth)}<>`];
+): GeneratedLine[] {
+  const lines = [mappedLine(`${indent(depth)}<>`, node.span.start)];
   for (const child of node.children) lines.push(...generateNode(child, depth + 1, document));
-  lines.push(`${indent(depth)}</>`);
+  lines.push(mappedLine(`${indent(depth)}</>`, node.span.start));
   return lines;
 }
 
-function generateStyle(node: StyleNode, depth: number): string[] {
-  const lines = [`${indent(depth)}<style>`];
-  for (const cssLine of node.css.split("\n")) {
-    lines.push(cssLine.length === 0 ? "" : `${indent(depth + 1)}${cssLine}`);
+function generateStyle(node: StyleNode, depth: number): GeneratedLine[] {
+  const lines = [mappedLine(`${indent(depth)}<style>`, node.span.start)];
+  for (const [index, cssLine] of node.css.split("\n").entries()) {
+    lines.push(
+      cssLine.length === 0
+        ? unmappedLine("")
+        : mappedLine(
+            `${indent(depth + 1)}${cssLine}`,
+            embeddedPosition(node.codeStart, index, cssLine),
+          ),
+    );
   }
-  lines.push(`${indent(depth)}</style>`);
+  lines.push(mappedLine(`${indent(depth)}</style>`, node.span.start));
   return lines;
 }
 
@@ -152,111 +248,127 @@ function generateElement(
   node: ElementNode,
   depth: number,
   document: BeastDocument,
-): string[] {
+): GeneratedLine[] {
   const padding = indent(depth);
   const attributes = generateAttributes(node, document);
-  const opening = `<${node.tag}${attributes.length === 0 ? "" : ` ${attributes}`}`;
+  const opening = `<${node.tag}${attributes.code.length === 0 ? "" : ` ${attributes.code}`}`;
   const inline = node.inlineSpans === null ? "" : generateText(node.inlineSpans);
+  const openingLine = (suffix: string): GeneratedLine => {
+    const line = mappedLine(`${padding}${opening}${suffix}`, node.span.start);
+    const attributeOffset = padding.length + node.tag.length + 2;
+    for (const mapping of attributes.mappings) {
+      line.mappings.push({ column: attributeOffset + mapping.column, source: mapping.source });
+    }
+    return line;
+  };
 
   if (node.children.length === 0 && inline.length === 0) {
-    return [`${padding}${opening} />`];
+    return [openingLine(" />")];
   }
   if (node.children.length === 0) {
-    return [`${padding}${opening}>${inline}</${node.tag}>`];
+    return [openingLine(`>${inline}</${node.tag}>`)];
   }
 
-  const lines = [`${padding}${opening}>`];
-  if (inline.length > 0) lines.push(`${indent(depth + 1)}${inline}`);
+  const lines = [openingLine(">")];
+  if (inline.length > 0) {
+    lines.push(mappedLine(`${indent(depth + 1)}${inline}`, node.span.start));
+  }
   for (const child of node.children) lines.push(...generateNode(child, depth + 1, document));
-  lines.push(`${padding}</${node.tag}>`);
+  lines.push(mappedLine(`${padding}</${node.tag}>`, node.span.start));
   return lines;
 }
 
-function generateIf(node: IfNode, depth: number, document: BeastDocument): string[] {
-  const lines: string[] = [];
+function generateIf(node: IfNode, depth: number, document: BeastDocument): GeneratedLine[] {
+  const lines: GeneratedLine[] = [];
   for (let index = 0; index < node.branches.length; index += 1) {
     const branch = node.branches[index];
     if (branch === undefined) continue;
     if (index === 0) {
-      lines.push(`${indent(depth)}@if (${branch.test}) {`);
+      lines.push(mappedLine(`${indent(depth)}@if (${branch.test}) {`, branch.span.start));
     } else if (branch.test === null) {
-      lines[lines.length - 1] = `${lines.at(-1)} @else {`;
+      appendMapped(lines.at(-1), " @else {", branch.span.start);
     } else {
-      lines[lines.length - 1] = `${lines.at(-1)} @else if (${branch.test}) {`;
+      appendMapped(lines.at(-1), ` @else if (${branch.test}) {`, branch.span.start);
     }
     for (const child of branch.children) lines.push(...generateNode(child, depth + 1, document));
-    lines.push(`${indent(depth)}}`);
+    lines.push(mappedLine(`${indent(depth)}}`, branch.span.start));
   }
   return lines;
 }
 
-function generateEach(node: EachNode, depth: number, document: BeastDocument): string[] {
+function generateEach(node: EachNode, depth: number, document: BeastDocument): GeneratedLine[] {
   const options = [
     node.indexName === null ? "" : `; index ${node.indexName}`,
     node.key === null ? "" : `; key ${node.key}`,
   ].join("");
   const lines = [
-    `${indent(depth)}@for (const ${node.itemName} of ${node.iterable}${options}) {`,
+    mappedLine(
+      `${indent(depth)}@for (const ${node.itemName} of ${node.iterable}${options}) {`,
+      node.span.start,
+    ),
   ];
   for (const child of node.children) lines.push(...generateNode(child, depth + 1, document));
-  lines.push(`${indent(depth)}}`);
+  lines.push(mappedLine(`${indent(depth)}}`, node.span.start));
   if (node.emptyChildren !== null) {
-    lines[lines.length - 1] = `${lines.at(-1)} @empty {`;
+    appendMapped(lines.at(-1), " @empty {", node.span.start);
     for (const child of node.emptyChildren) {
       lines.push(...generateNode(child, depth + 1, document));
     }
-    lines.push(`${indent(depth)}}`);
+    lines.push(mappedLine(`${indent(depth)}}`, node.span.start));
   }
   return lines;
 }
 
-function generateSwitch(node: SwitchNode, depth: number, document: BeastDocument): string[] {
-  const lines = [`${indent(depth)}@switch (${node.discriminant}) {`];
+function generateSwitch(node: SwitchNode, depth: number, document: BeastDocument): GeneratedLine[] {
+  const lines = [mappedLine(`${indent(depth)}@switch (${node.discriminant}) {`, node.span.start)];
   for (const branch of node.branches) {
     lines.push(
-      branch.test === null
-        ? `${indent(depth + 1)}@default: {`
-        : `${indent(depth + 1)}@case ${branch.test}: {`,
+      mappedLine(
+        branch.test === null
+          ? `${indent(depth + 1)}@default: {`
+          : `${indent(depth + 1)}@case ${branch.test}: {`,
+        branch.span.start,
+      ),
     );
     for (const child of branch.children) {
       lines.push(...generateNode(child, depth + 2, document));
     }
-    lines.push(`${indent(depth + 1)}}`);
+    lines.push(mappedLine(`${indent(depth + 1)}}`, branch.span.start));
   }
-  lines.push(`${indent(depth)}}`);
+  lines.push(mappedLine(`${indent(depth)}}`, node.span.start));
   return lines;
 }
 
-function generateTry(node: TryNode, depth: number, document: BeastDocument): string[] {
-  const lines = [`${indent(depth)}@try {`];
+function generateTry(node: TryNode, depth: number, document: BeastDocument): GeneratedLine[] {
+  const lines = [mappedLine(`${indent(depth)}@try {`, node.span.start)];
   for (const child of node.children) {
     lines.push(...generateNode(child, depth + 1, document));
   }
-  lines.push(`${indent(depth)}}`);
+  lines.push(mappedLine(`${indent(depth)}}`, node.span.start));
 
   if (node.pendingBranch !== null) {
-    lines[lines.length - 1] = `${lines.at(-1)} @pending {`;
+    appendMapped(lines.at(-1), " @pending {", node.pendingBranch.span.start);
     for (const child of node.pendingBranch.children) {
       lines.push(...generateNode(child, depth + 1, document));
     }
-    lines.push(`${indent(depth)}}`);
+    lines.push(mappedLine(`${indent(depth)}}`, node.pendingBranch.span.start));
   }
 
   if (node.catchBranch !== null) {
     const bindings =
       node.catchBranch.bindings === null ? "" : ` (${node.catchBranch.bindings})`;
-    lines[lines.length - 1] = `${lines.at(-1)} @catch${bindings} {`;
+    appendMapped(lines.at(-1), ` @catch${bindings} {`, node.catchBranch.span.start);
     for (const child of node.catchBranch.children) {
       lines.push(...generateNode(child, depth + 1, document));
     }
-    lines.push(`${indent(depth)}}`);
+    lines.push(mappedLine(`${indent(depth)}}`, node.catchBranch.span.start));
   }
 
   return lines;
 }
 
-function generateAttributes(node: ElementNode, document: BeastDocument): string {
-  const output: string[] = [];
+function generateAttributes(node: ElementNode, document: BeastDocument): GeneratedChunk {
+  const output: Array<{ code: string; source: SourcePosition }> = [];
 
   const explicitId = node.attrs.findIndex(
     (attr) => attr.kind === "attribute" && attr.name === "id",
@@ -269,7 +381,9 @@ function generateAttributes(node: ElementNode, document: BeastDocument): string 
       document,
     );
   }
-  if (node.id !== null) output.push(`id=${JSON.stringify(node.id)}`);
+  if (node.id !== null) {
+    output.push({ code: `id=${JSON.stringify(node.id)}`, source: node.span.start });
+  }
 
   const classAttrs = node.attrs.filter(
     (attr): attr is NamedAttr =>
@@ -286,19 +400,26 @@ function generateAttributes(node: ElementNode, document: BeastDocument): string 
   const explicitClass = classAttrs[0];
   const shorthand = node.classes.join(" ");
   if (shorthand.length > 0 && explicitClass === undefined) {
-    output.push(`className=${JSON.stringify(shorthand)}`);
+    output.push({ code: `className=${JSON.stringify(shorthand)}`, source: node.span.start });
   }
 
   for (const attr of node.attrs) {
     if (attr.kind === "spread") {
-      output.push(`{...${attr.code}}`);
+      output.push({ code: `{...${attr.code}}`, source: attr.span.start });
     } else if (attr === explicitClass) {
-      output.push(generateClassAttribute(attr, shorthand));
+      output.push({ code: generateClassAttribute(attr, shorthand), source: attr.span.start });
     } else {
-      output.push(generateAttribute(attr));
+      output.push({ code: generateAttribute(attr), source: attr.span.start });
     }
   }
-  return output.join(" ");
+
+  const mappings: GeneratedMapping[] = [];
+  let column = 0;
+  for (const part of output) {
+    mappings.push({ column, source: part.source });
+    column += part.code.length + 1;
+  }
+  return { code: output.map((part) => part.code).join(" "), mappings };
 }
 
 function generateClassAttribute(attr: NamedAttr, shorthand: string): string {
@@ -350,6 +471,42 @@ function escapeTemplateText(value: string): string {
 
 function indent(depth: number): string {
   return "\t".repeat(depth);
+}
+
+function mappedLine(code: string, source: SourcePosition): GeneratedLine {
+  const column = code.search(/\S/u);
+  return {
+    code,
+    mappings: column === -1 ? [] : [{ column, source }],
+  };
+}
+
+function unmappedLine(code: string): GeneratedLine {
+  return { code, mappings: [] };
+}
+
+function embeddedPosition(
+  start: SourcePosition,
+  lineOffset: number,
+  codeLine: string,
+): SourcePosition {
+  const leading = codeLine.match(/^ */u)?.[0].length ?? 0;
+  return {
+    offset: start.offset,
+    line: start.line + lineOffset,
+    column: start.column + leading,
+  };
+}
+
+function appendMapped(
+  line: GeneratedLine | undefined,
+  suffix: string,
+  source: SourcePosition,
+): void {
+  if (line === undefined) return;
+  const column = line.code.length + (suffix.search(/\S/u) === -1 ? 0 : suffix.search(/\S/u));
+  line.code += suffix;
+  line.mappings.push({ column, source });
 }
 
 function generateComponentOpening(

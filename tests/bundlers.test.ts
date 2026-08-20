@@ -93,6 +93,7 @@ describe("Octane bundler integrations", () => {
     await runRspack({
       context: root,
       mode: "production",
+      devtool: "source-map",
       target: "web",
       entry: "./src/main.ts",
       output: {
@@ -111,6 +112,20 @@ describe("Octane bundler integrations", () => {
     const entry = await readFile(resolve(outDir, "main.js"), "utf8");
     expect(entry).toContain("Native TSRX");
     expect(entry).toContain("Bundler lifecycle");
+    const sourceMaps = await Promise.all(
+      files.filter((file) => file.endsWith(".js.map"))
+        .map(async (file) => JSON.parse(await readFile(resolve(outDir, file), "utf8")) as {
+          sources: string[];
+          sourcesContent?: Array<string | null>;
+        }),
+    );
+    const beastMap = sourceMaps.find((map) =>
+      map.sources.some((source) => source.endsWith("/src/App.btsx")),
+    );
+    expect(beastMap).toBeDefined();
+    expect(beastMap?.sources.some((source) => source.endsWith("/src/App.tsrx"))).toBe(false);
+    expect(beastMap?.sourcesContent?.some((source) => source?.includes("h1 Bundler lifecycle")))
+      .toBe(true);
 
     const serverOutDir = resolve(root, "dist-server");
     await runRspack({
