@@ -870,6 +870,67 @@ its public parameter type.
 `beast()` is also exported for advanced configurations that only need the
 BTSX pre-transform. Most applications should use `beastOctane()` exactly once.
 
+## Rspack integration
+
+Use the complete adapter with Octane's low-level Rspack plugin:
+
+```bash
+npm install octane@0.1.37
+npm install --save-dev @rspack/core@^2 @octanejs/rspack-plugin@0.1.32
+```
+
+```js
+// rspack.config.mjs
+import { beastOctane } from "beast-tsrx/rspack";
+
+export default {
+  entry: "./src/main.ts",
+  plugins: [
+    beastOctane({
+      octane: { strong: true },
+    }),
+  ],
+};
+```
+
+The adapter compiles `.btsx`, leaves native `.tsrx` and compiler-owned helper
+modules to Octane, selects client or server output from the Rspack target, and
+registers source dependencies with Rspack's cache and watcher. Its `.tsrx`
+extension fallback resolves compiler-split hydration requests back to the
+originating `.btsx` module while preferring a real native `.tsrx` file.
+
+`beast()` and `BeastRspackPlugin` are also exported for configurations that
+already install `OctaneRspackPlugin` themselves.
+
+## Rsbuild integration
+
+The Rsbuild adapter composes Beast with Octane's full compiler and application
+plugin:
+
+```bash
+npm install octane@0.1.37 @octanejs/rsbuild-plugin@0.1.32
+npm install --save-dev @rsbuild/core@^2
+```
+
+```ts
+// rsbuild.config.ts
+import { defineConfig } from "@rsbuild/core";
+import { beastOctane } from "beast-tsrx/rsbuild";
+
+export default defineConfig({
+  plugins: beastOctane({
+    octane: { strong: true },
+  }),
+});
+```
+
+Without Octane routes this preserves ordinary Rsbuild entries. With an
+`octane.config.ts`, render routes can point directly at `.btsx` modules and use
+Octane's browser hydration and Node SSR environments. Inline compiler options
+and the project's Strong-mode and renderer configuration are forwarded to the
+BTSX transform. Use the exported Rsbuild `beast()` plugin alone when
+`pluginOctane()` is already present.
+
 ## Programmatic API
 
 ### Compile source
@@ -924,11 +985,12 @@ root. The same shape is accepted by the Vite integration.
 | `resolveProjectPath()` | Resolve project-relative configuration paths |
 | `BeastCompileError` | Structured compiler error carrying a stable diagnostic |
 | `formatDiagnostic()` | Render a diagnostic with source location and caret context |
-| `beast()` | Vite pre-transform for BTSX modules |
-| `beastOctane()` | Complete Vite integration for mixed BTSX and TSRX projects |
+| `beast()`, `beastOctane()` | Beast-only and complete Vite integrations from `beast-tsrx/vite` |
+| `BeastRspackPlugin`, `beast()`, `beastOctane()` | Rspack integrations from `beast-tsrx/rspack` |
+| `beast()`, `beastOctane()` | Rsbuild plugins from `beast-tsrx/rsbuild` |
 
-Vite exports are available from `beast-tsrx/vite`; compiler and project exports
-are available from `beast-tsrx`.
+Compiler and project exports are available from `beast-tsrx`; build-tool
+adapters use their named subpaths above.
 
 ## Diagnostics
 
@@ -956,6 +1018,8 @@ validation from Octane.
 | TSRX TypeScript plugin | `0.3.118` | `.tsrx` and `.btsx` project type checking |
 | Octane | `0.1.37` | TSRX validation, lowering, and runtime |
 | Vite | `^8.0.16` | Development server and production bundling |
+| Octane Rspack/Rsbuild plugins | `0.1.32` | Bundler integration compatible with Octane `0.1.37` |
+| Rspack / Rsbuild | `^2.0.0` | Low-level and application-level production builds |
 
 Octane and TSRX are evolving. Beast pins the versions used by its conformance
 suite and starter project so failures are reproducible.
@@ -976,8 +1040,9 @@ The current suite and release checks verify the behavior Beast claims publicly:
   Suspense completion through Node and Web transports, and bound async work.
 - Recursive builds must mirror paths, emit a versioned manifest, and safely
   remove only stale outputs tracked by the previous manifest.
-- Mixed `.btsx` and native `.tsrx` applications must complete a production
-  Vite build.
+- Mixed `.btsx` and native `.tsrx` applications must complete production Vite,
+  Rspack, and Rsbuild builds, including their covered server and split-module
+  paths.
 - The project creator must preserve unrelated files, refuse accidental writes
   to non-empty directories, and generate the expected toolchain configuration.
 - Packed `beast-tsrx` and `create-beast` artifacts must install into a clean
@@ -998,6 +1063,9 @@ beast/
 │   ├── diagnostics.ts           # Structured errors and formatting
 │   ├── project.ts               # Recursive source-tree builder
 │   ├── vite.ts                  # Beast and Octane Vite integration
+│   ├── rspack.ts                # Beast and Octane Rspack integration
+│   ├── rspack-loader.ts         # Rspack BTSX-to-Octane transform
+│   ├── rsbuild.ts               # Beast and Octane Rsbuild integration
 │   └── cli.ts                   # `beast` command-line adapter
 ├── packages/create-beast/
 │   ├── src/index.ts             # Project creator CLI and API
@@ -1032,6 +1100,7 @@ beast/
 │   └── octane-coverage.md       # Official-doc coverage map and roadmap
 ├── tests/
 │   ├── compiler.test.ts         # Compiler and Octane behavior conformance
+│   ├── bundlers.test.ts         # Rspack and Rsbuild production lifecycles
 │   ├── core-api.test.ts         # Pinned public Core API export inventory
 │   ├── project.test.ts          # Project builder and Vite tests
 │   ├── runtime.test.ts          # Client hydration, roots, portals, and behavior

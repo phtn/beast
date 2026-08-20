@@ -46,6 +46,8 @@ through `import`, `setup`, attributes, and nesting unchanged.
 | Server and static rendering | Hydratable/static buffered output, scoped CSS/head channels, Node and Web progressive streams, await-everything output, aborts, deadlines, and complete Node preludes | Executable renderer lifecycle suite |
 | Public entry points | Every tracked name is present in the pinned `octane`, hydration, behavior, server, and static module namespaces | Machine-readable Core API inventory test |
 | Vite application lifecycle | Mixed BTSX/TSRX production build plus a BTSX SSR render, server-DOM adoption, interaction replay, and compiler-split deferred chunk | Executable project integration tests |
+| Rspack application lifecycle | Mixed BTSX/TSRX client build with a compiler-split deferred chunk plus an executable Node-target SSR render | Executable bundler integration test |
+| Rsbuild application lifecycle | Mixed compiler-only build plus routed browser and Node environments whose generated handler SSR-renders a BTSX route | Executable bundler integration tests |
 
 Every golden output is compared byte for byte and compiled with the pinned
 Octane compiler. The focused lifecycle suites execute the non-template entry
@@ -108,26 +110,25 @@ public entry point.
 
 ## Next additions
 
-### 1. Add more bundler integrations
-
-The Vite path now has production client and server builds, an executable SSR
-render-to-hydration lifecycle, and compiler-split deferred hydration coverage.
-Next, add Beast adapters or documented precompile workflows for Octane's Rspack
-and Rsbuild integrations. Framework-specific adapters should follow only when
-the core bundler contracts are stable.
-
-### 2. Improve compiler tooling
+### 1. Improve compiler tooling
 
 Add Beast-to-TSRX source maps and a standalone watch mode. These are not Octane
 runtime capabilities, but they are required for complete diagnostics and a
 non-Vite development workflow.
 
+### 2. Add framework-specific adapters
+
+Vite, Rspack, and Rsbuild now cover the core bundler contracts. Add
+framework-specific adapters only where their routing or server ownership needs
+more than the normal Rsbuild application plugin.
+
 ## Recommended order
 
 The smallest dependency-aware sequence is:
 
-1. Rspack/Rsbuild integration.
-2. Source maps and standalone watch mode.
+1. Beast-to-TSRX source maps.
+2. Standalone watch mode.
+3. Framework-specific adapters as concrete integrations require them.
 
 [Quick start]: https://octanejs.dev/docs
 [Core APIs]: https://octanejs.dev/docs/core-apis
