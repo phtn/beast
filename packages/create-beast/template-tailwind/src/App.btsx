@@ -11,4 +11,3 @@ main.app
     div.flex
       each link in links key link.id
         a.button(id={link.id} className='w-36 text-center flex justify-center' href={link.url} target="_blank" rel="noreferrer") #{link.label}
-
