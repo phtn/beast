@@ -37,10 +37,12 @@ export type { BeastSourceMap } from "./source-map.js";
 export { BeastCompileError, formatDiagnostic } from "./diagnostics.js";
 export type { BeastDiagnostic, DiagnosticSeverity } from "./diagnostics.js";
 export { parse } from "./parser.js";
-export { buildBeastProject, resolveProjectPath } from "./project.js";
+export { buildBeastProject, resolveProjectPath, watchBeastProject } from "./project.js";
 export type {
   BuildProjectOptions,
   BuiltProjectFile,
   ProjectBuildResult,
   ProjectComponentOptions,
+  ProjectWatchSession,
+  WatchProjectOptions,
 } from "./project.js";

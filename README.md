@@ -41,7 +41,7 @@ validation, lowering, development serving, and production bundling.
 | BTSX compiler | Converts indentation-based `.btsx` into native `.tsrx` | Keeps generated output inspectable |
 | Component setup | Emits local TypeScript and Octane hooks before the template root | Keeps stateful components self-contained |
 | Native control flow | Emits Octane condition, loop, switch, and boundary directives | Preserves TSRX semantics and identity |
-| Project builder | Recursively compiles BTSX and validates native TSRX | Supports mixed source trees |
+| Project builder | Recursively compiles BTSX, validates native TSRX, and watches changes | Supports mixed source trees and recoverable rebuilds |
 | Vite integration | Runs Beast before Octane in memory | Enables normal dev and production builds |
 | Diagnostics | Reports stable codes with file and source spans | Makes compiler failures actionable |
 | Project creator | Scaffolds a typed Beast, Octane, and Vite application | Provides a coherent starting point |
@@ -776,7 +776,7 @@ compilation and recursive source-tree builds.
 ```text
 beast compile <input.btsx> [options]
 beast <input.btsx> [output.tsrx] [options]
-beast build [source-directory] [options]
+beast build [source-directory] [options] [--watch]
 beast --help
 ```
 
@@ -810,6 +810,7 @@ beast build ./src --out-dir ./.beast
 | `source-directory` | Root recursively searched for `.btsx` and `.tsrx` | Current directory |
 | `--out-dir PATH` | Mirrored destination for generated TSRX | `<source-directory>/.beast` |
 | `--no-validate` | Skip validation of generated and native TSRX | Validation enabled |
+| `--watch` | Rebuild after source-tree changes and recover after compile errors | Disabled |
 
 The builder ignores `.git`, `.beast`, `build`, `coverage`, `dist`, and
 `node_modules`. Discovery and manifest entries are sorted for deterministic
@@ -825,6 +826,11 @@ canonical `.tsrx` paths inside the output directory, skips symlinked parent
 directories, prunes directories only when they become empty, and never removes
 untracked files. Removed paths are returned as `result.removed` and reported by
 the CLI.
+
+Watch mode debounces bursts of filesystem events and runs only one build at a
+time. It excludes the configured output tree and Beast's normal ignored
+directories, reports failed rebuilds without exiting, and resumes from the
+next source change.
 
 The project builder does not replace an application bundler. Octane and Vite
 remain responsible for producing a deployable application.
@@ -974,6 +980,22 @@ const result = await buildBeastProject({
 console.log(result.manifestPath, result.removed);
 ```
 
+For a long-running non-Vite workflow, use the same options with the watch API:
+
+```ts
+import { watchBeastProject } from "beast-tsrx";
+
+const watcher = watchBeastProject({
+  root: "src",
+  outDir: ".beast",
+  onBuild: (result) => console.log(result.generated),
+  onError: (error) => console.error(error),
+});
+
+await watcher.ready;
+// Later: await watcher.close();
+```
+
 Component configuration keys are POSIX-style paths relative to the project
 root. The same shape is accepted by the Vite integration.
 
@@ -986,6 +1008,7 @@ root. The same shape is accepted by the Vite integration.
 | `parse()` | Parse BTSX into the public Beast AST |
 | `componentNameFromPath()` | Derive and sanitize a component identifier from a path |
 | `buildBeastProject()` | Compile and validate a recursive source tree |
+| `watchBeastProject()` | Watch a source tree with debounced, serialized, recoverable rebuilds |
 | `resolveProjectPath()` | Resolve project-relative configuration paths |
 | `BeastCompileError` | Structured compiler error carrying a stable diagnostic |
 | `formatDiagnostic()` | Render a diagnostic with source location and caret context |
@@ -1066,7 +1089,7 @@ beast/
 │   ├── compiler.ts              # Public compilation entry points
 │   ├── diagnostics.ts           # Structured errors and formatting
 │   ├── source-map.ts            # Version 3 map composition
-│   ├── project.ts               # Recursive source-tree builder
+│   ├── project.ts               # Recursive builder and standalone watcher
 │   ├── vite.ts                  # Beast and Octane Vite integration
 │   ├── rspack.ts                # Beast and Octane Rspack integration
 │   ├── rspack-loader.ts         # Rspack BTSX-to-Octane transform
@@ -1156,8 +1179,6 @@ Current limitations:
 
 - The CLI builder has no per-file configuration file; use the programmatic API
   or Vite component options.
-- Standalone watch mode is not implemented; Vite owns watched application
-  builds.
 - Embedded expressions are preserved as source slices rather than parsed into
   a TypeScript expression AST by Beast.
 - Tab indentation is intentionally unsupported.

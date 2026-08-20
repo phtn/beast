@@ -1,3 +1,4 @@
+import { watch as watchFileSystem } from "node:fs";
 import { lstat, mkdir, readdir, readFile, rmdir, unlink, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import { compileBeast, componentNameFromPath } from "./compiler.js";
@@ -28,6 +29,18 @@ export interface ProjectBuildResult {
   removed: string[];
   validatedNativeTsrx: string[];
   manifestPath: string;
+}
+
+export interface WatchProjectOptions extends BuildProjectOptions {
+  debounceMs?: number;
+  onBuild?: (result: ProjectBuildResult) => void;
+  onError?: (error: unknown) => void;
+}
+
+export interface ProjectWatchSession {
+  /** Settles after the initial build succeeds or fails. Later failures use `onError`. */
+  readonly ready: Promise<ProjectBuildResult>;
+  close(): Promise<void>;
 }
 
 interface BuildManifest {
@@ -111,6 +124,110 @@ export async function buildBeastProject(
   await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
 
   return { root, outDir, generated, removed, validatedNativeTsrx, manifestPath };
+}
+
+/** Watch a source tree and serialize incremental full-project rebuilds. */
+export function watchBeastProject(options: WatchProjectOptions): ProjectWatchSession {
+  const {
+    debounceMs = 40,
+    onBuild,
+    onError,
+    ...buildOptions
+  } = options;
+  if (!Number.isFinite(debounceMs) || debounceMs < 0) {
+    throw new RangeError("The Beast watch debounce must be a non-negative finite number.");
+  }
+
+  const root = resolve(buildOptions.root);
+  const outDir = resolve(buildOptions.outDir ?? resolve(root, ".beast"));
+  if (outDir === root) {
+    throw new Error("The Beast project output directory must differ from the source root.");
+  }
+  let closed = false;
+  let timer: NodeJS.Timeout | undefined;
+  let activeBuild: Promise<void> | undefined;
+  let rebuildRequested = false;
+  let initialPending = true;
+  let resolveReady!: (result: ProjectBuildResult) => void;
+  let rejectReady!: (error: unknown) => void;
+  const ready = new Promise<ProjectBuildResult>((resolveInitial, rejectInitial) => {
+    resolveReady = resolveInitial;
+    rejectReady = rejectInitial;
+  });
+
+  const reportError = (error: unknown): void => {
+    try {
+      onError?.(error);
+    } catch {
+      // A reporting callback must not stop later rebuilds.
+    }
+  };
+
+  const performBuild = async (): Promise<void> => {
+    let result: ProjectBuildResult;
+    try {
+      result = await buildBeastProject(buildOptions);
+    } catch (error) {
+      if (initialPending) {
+        initialPending = false;
+        rejectReady(error);
+      }
+      reportError(error);
+      return;
+    }
+
+    if (initialPending) {
+      initialPending = false;
+      resolveReady(result);
+    }
+    try {
+      onBuild?.(result);
+    } catch (error) {
+      reportError(error);
+    }
+  };
+
+  const startBuild = (): void => {
+    if (closed) return;
+    if (activeBuild !== undefined) {
+      rebuildRequested = true;
+      return;
+    }
+    activeBuild = performBuild().finally(() => {
+      activeBuild = undefined;
+      if (!closed && rebuildRequested) {
+        rebuildRequested = false;
+        startBuild();
+      }
+    });
+  };
+
+  const scheduleBuild = (): void => {
+    if (closed) return;
+    if (timer !== undefined) clearTimeout(timer);
+    timer = setTimeout(() => {
+      timer = undefined;
+      startBuild();
+    }, debounceMs);
+  };
+
+  const watcher = watchFileSystem(root, { recursive: true }, (_event, filename) => {
+    if (filename !== null && shouldIgnoreWatchPath(root, outDir, filename.toString())) return;
+    scheduleBuild();
+  });
+  watcher.on("error", reportError);
+  startBuild();
+
+  return {
+    ready,
+    async close() {
+      if (closed) return;
+      closed = true;
+      if (timer !== undefined) clearTimeout(timer);
+      watcher.close();
+      await activeBuild;
+    },
+  };
 }
 
 async function readPreviousGeneratedOutputs(manifestPath: string): Promise<string[]> {
@@ -252,6 +369,23 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isFileSystemError(error: unknown, code: string): error is NodeJS.ErrnoException {
   return error instanceof Error && "code" in error && error.code === code;
+}
+
+function shouldIgnoreWatchPath(root: string, outDir: string, changedPath: string): boolean {
+  const target = resolve(root, changedPath);
+  if (isWithin(outDir, target)) return true;
+  const relativeName = relative(root, target);
+  return relativeName.split(sep).some((part) => IGNORED_DIRECTORIES.has(part));
+}
+
+function isWithin(directory: string, target: string): boolean {
+  const relativeName = relative(directory, target);
+  return (
+    relativeName.length === 0 ||
+    (relativeName !== ".." &&
+      !relativeName.startsWith(`..${sep}`) &&
+      !isAbsolute(relativeName))
+  );
 }
 
 async function collectSourceFiles(root: string, outDir: string): Promise<string[]> {

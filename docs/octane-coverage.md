@@ -49,6 +49,7 @@ through `import`, `setup`, attributes, and nesting unchanged.
 | Rspack application lifecycle | Mixed BTSX/TSRX client build with a compiler-split deferred chunk plus an executable Node-target SSR render | Executable bundler integration test |
 | Rsbuild application lifecycle | Mixed compiler-only build plus routed browser and Node environments whose generated handler SSR-renders a BTSX route | Executable bundler integration tests |
 | Source-map pipeline | Declaration, multiline source-body, template-node, branch, and attribute anchors compose through Octane to original BTSX in Vite and Rspack output | Compiler mapping assertions plus emitted Vite and Rspack map tests |
+| Standalone watch lifecycle | Debounced and serialized project rebuilds, ignored output events, stale cleanup, compile-error reporting, and recovery after a valid edit | Executable project API and CLI watcher tests |
 
 Every golden output is compared byte for byte and compiled with the pinned
 Octane compiler. The focused lifecycle suites execute the non-template entry
@@ -111,12 +112,7 @@ public entry point.
 
 ## Next additions
 
-### 1. Improve compiler tooling
-
-Add a standalone watch mode. This is not an Octane runtime capability, but it
-is required for a non-Vite development workflow.
-
-### 2. Add framework-specific adapters
+### 1. Add framework-specific adapters
 
 Vite, Rspack, and Rsbuild now cover the core bundler contracts. Add
 framework-specific adapters only where their routing or server ownership needs
@@ -124,10 +120,9 @@ more than the normal Rsbuild application plugin.
 
 ## Recommended order
 
-The smallest dependency-aware sequence is:
-
-1. Standalone watch mode.
-2. Framework-specific adapters as concrete integrations require them.
+The remaining work is framework-specific: add adapters as concrete routing or
+server-ownership requirements emerge beyond the normal Rsbuild application
+plugin.
 
 [Quick start]: https://octanejs.dev/docs
 [Core APIs]: https://octanejs.dev/docs/core-apis

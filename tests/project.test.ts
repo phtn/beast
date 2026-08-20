@@ -5,7 +5,7 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { build as viteBuild } from "vite";
 import { Window } from "happy-dom";
-import { BeastCompileError, buildBeastProject } from "../src/index.js";
+import { BeastCompileError, buildBeastProject, watchBeastProject } from "../src/index.js";
 import { beastOctane } from "../src/vite.js";
 
 const temporaryDirectories: string[] = [];
@@ -100,6 +100,19 @@ async function waitFor(check: () => boolean, message: string): Promise<void> {
   }
 }
 
+async function waitForFileText(path: string, text: string, message: string): Promise<void> {
+  const deadline = Date.now() + 2_000;
+  while (true) {
+    try {
+      if ((await readFile(path, "utf8")).includes(text)) return;
+    } catch {
+      // The initial build may not have created the file yet.
+    }
+    if (Date.now() >= deadline) throw new Error(message);
+    await Bun.sleep(10);
+  }
+}
+
 describe("project building", () => {
   test("builds a mirrored TSRX source tree and validates native TSRX", async () => {
     const root = await temporaryProject();
@@ -130,6 +143,87 @@ describe("project building", () => {
     };
     expect(manifest.schemaVersion).toBe(1);
     expect(manifest.generated).toHaveLength(1);
+  });
+
+  test("watches source changes, recovers from errors, and ignores its output tree", async () => {
+    const root = await temporaryProject();
+    const outDir = resolve(root, ".generated");
+    const sourceFile = resolve(root, "App.btsx");
+    await Bun.write(sourceFile, "main\n  h1 First\n");
+    expect(() => watchBeastProject({ root, outDir: root })).toThrow(
+      "output directory must differ",
+    );
+    expect(() => watchBeastProject({ root, debounceMs: -1 })).toThrow(
+      "debounce must be a non-negative finite number",
+    );
+    const builds: Awaited<ReturnType<typeof buildBeastProject>>[] = [];
+    const errors: unknown[] = [];
+    const session = watchBeastProject({
+      root,
+      outDir,
+      validate: false,
+      debounceMs: 10,
+      onBuild: (result) => builds.push(result),
+      onError: (error) => errors.push(error),
+    });
+
+    try {
+      const initial = await session.ready;
+      expect(initial.generated.map((file) => file.output)).toEqual(["App.tsrx"]);
+      expect(builds).toHaveLength(1);
+
+      await Bun.write(sourceFile, "main\n\tspan Broken\n");
+      await waitFor(() => errors.length > 0, "Expected the watcher to report a compile error.");
+      expect(errors[0]).toBeInstanceOf(BeastCompileError);
+
+      await Bun.write(sourceFile, "main\n  h1 Recovered\n");
+      await waitFor(() => builds.length >= 2, "Expected the watcher to recover after an edit.");
+      expect(await readFile(resolve(outDir, "App.tsrx"), "utf8")).toContain("Recovered");
+
+      await rm(sourceFile);
+      await waitFor(() => builds.length >= 3, "Expected the watcher to rebuild after deletion.");
+      expect(builds.at(-1)?.removed).toEqual(["App.tsrx"]);
+      await expect(readFile(resolve(outDir, "App.tsrx"), "utf8")).rejects.toThrow();
+
+      await Bun.sleep(100);
+      expect(builds).toHaveLength(3);
+    } finally {
+      await session.close();
+    }
+  });
+
+  test("runs standalone CLI watch builds until the process is stopped", async () => {
+    const root = await temporaryProject();
+    const outDir = resolve(root, ".generated");
+    const sourceFile = resolve(root, "App.btsx");
+    const outputFile = resolve(outDir, "App.tsrx");
+    await Bun.write(sourceFile, "main\n  h1 First\n");
+    const child = Bun.spawn({
+      cmd: [
+        process.execPath,
+        resolve("src", "cli.ts"),
+        "build",
+        root,
+        "--out-dir",
+        outDir,
+        "--no-validate",
+        "--watch",
+      ],
+      cwd: resolve("."),
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+
+    try {
+      await waitForFileText(outputFile, "First", "Expected the CLI watch initial build.");
+      await Bun.write(sourceFile, "main\n  h1 Updated\n");
+      await waitForFileText(outputFile, "Updated", "Expected the CLI watch rebuild.");
+    } finally {
+      child.kill();
+      await child.exited;
+    }
+    expect(await new Response(child.stdout).text()).toContain("Built 1 BTSX component");
+    expect(await new Response(child.stderr).text()).toBe("");
   });
 
   test("Vite builds mixed BTSX and native TSRX through Octane", async () => {
