@@ -1,8 +1,10 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp, readFile, rename, rm, stat, symlink } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rename, rm, stat, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import { build as viteBuild } from "vite";
+import { Window } from "happy-dom";
 import { BeastCompileError, buildBeastProject } from "../src/index.js";
 import { beastOctane } from "../src/vite.js";
 
@@ -20,6 +22,82 @@ async function temporaryProject(): Promise<string> {
   const directory = await mkdtemp(resolve(tmpdir(), "beast-project-test-"));
   temporaryDirectories.push(directory);
   return directory;
+}
+
+const DOM_GLOBALS = [
+  "AbortController",
+  "AbortSignal",
+  "CharacterData",
+  "Comment",
+  "CompositionEvent",
+  "CustomEvent",
+  "Document",
+  "DocumentFragment",
+  "DOMException",
+  "Element",
+  "Event",
+  "FocusEvent",
+  "HTMLButtonElement",
+  "HTMLElement",
+  "HTMLInputElement",
+  "HTMLTemplateElement",
+  "InputEvent",
+  "KeyboardEvent",
+  "MathMLElement",
+  "MouseEvent",
+  "MutationObserver",
+  "Node",
+  "NodeFilter",
+  "PointerEvent",
+  "Range",
+  "SVGElement",
+  "Text",
+  "TouchEvent",
+] as const;
+
+function installDomGlobals(browser: Window): () => void {
+  const originals = new Map<string, PropertyDescriptor | undefined>();
+  const browserValues = browser as unknown as Record<string, unknown>;
+
+  for (const name of ["window", "self", "document", ...DOM_GLOBALS]) {
+    originals.set(name, Object.getOwnPropertyDescriptor(globalThis, name));
+    Object.defineProperty(globalThis, name, {
+      configurable: true,
+      writable: true,
+      value: name === "window" || name === "self"
+        ? browser
+        : name === "document"
+          ? browser.document
+          : browserValues[name],
+    });
+  }
+
+  for (const name of ["requestAnimationFrame", "cancelAnimationFrame", "getComputedStyle"] as const) {
+    originals.set(name, Object.getOwnPropertyDescriptor(globalThis, name));
+    Object.defineProperty(globalThis, name, {
+      configurable: true,
+      writable: true,
+      value: browserValues[name] instanceof Function
+        ? browserValues[name].bind(browser)
+        : browserValues[name],
+    });
+  }
+
+  return () => {
+    for (const [name, descriptor] of originals) {
+      if (descriptor === undefined) delete (globalThis as Record<string, unknown>)[name];
+      else Object.defineProperty(globalThis, name, descriptor);
+    }
+    browser.close();
+  };
+}
+
+async function waitFor(check: () => boolean, message: string): Promise<void> {
+  const deadline = Date.now() + 2_000;
+  while (!check()) {
+    if (Date.now() >= deadline) throw new Error(message);
+    await Bun.sleep(10);
+  }
 }
 
 describe("project building", () => {
@@ -92,6 +170,117 @@ describe("project building", () => {
     });
 
     expect(await readFile(resolve(root, "dist", "index.html"), "utf8")).toContain("/assets/");
+  });
+
+  test("Vite renders an SSR build and hydrates a compiler-split BTSX boundary", async () => {
+    const root = await temporaryProject();
+    await symlink(resolve("node_modules"), resolve(root, "node_modules"), "dir");
+    await mkdir(resolve(root, "src"), { recursive: true });
+    await Bun.write(
+      resolve(root, "src", "App.btsx"),
+      [
+        'import { Hydrate, useState } from "octane";',
+        'import { interaction } from "octane/hydration";',
+        "component DeferredCounter",
+        "  setup",
+        "    const [count, setCount] = useState(0);",
+        "  button#activate(type=\"button\" onClick={() => setCount(count + 1)}) Count #{count}",
+        "main",
+        "  h1 Vite lifecycle",
+        "  Hydrate(when={interaction({ events: \"click\" })} onHydrated={() => ((globalThis as any).__beastHydrated += 1)})",
+        "    DeferredCounter",
+      ].join("\n"),
+    );
+    await Bun.write(
+      resolve(root, "src", "entry-server.ts"),
+      [
+        'import { renderToString } from "octane/server";',
+        'import App from "./App.btsx";',
+        "export function render() {",
+        "  return renderToString(App).html;",
+        "}",
+      ].join("\n"),
+    );
+    await Bun.write(
+      resolve(root, "src", "entry-client.ts"),
+      [
+        'import { hydrateRoot } from "octane";',
+        'import { initializeHydrationEventCapture } from "octane/hydration";',
+        'import App from "./App.btsx";',
+        "const container = document.getElementById(\"app\")!;",
+        "initializeHydrationEventCapture(document);",
+        "(globalThis as any).__beastRoot = hydrateRoot(container, App);",
+      ].join("\n"),
+    );
+
+    await viteBuild({
+      root,
+      logLevel: "silent",
+      plugins: [beastOctane()],
+      build: {
+        minify: false,
+        outDir: "dist/server",
+        ssr: "src/entry-server.ts",
+        rollupOptions: { output: { entryFileNames: "server.js" } },
+      },
+    });
+    await viteBuild({
+      root,
+      logLevel: "silent",
+      plugins: [beastOctane()],
+      build: {
+        minify: false,
+        outDir: "dist/client",
+        rollupOptions: {
+          input: resolve(root, "src", "entry-client.ts"),
+          output: {
+            entryFileNames: "client.js",
+            chunkFileNames: "chunks/[name]-[hash].js",
+          },
+        },
+      },
+    });
+
+    const clientFiles = await readdir(resolve(root, "dist", "client"), { recursive: true });
+    expect(clientFiles.filter((file) => file.endsWith(".js"))).toHaveLength(2);
+    expect(clientFiles.some((file) => file.startsWith("chunks/") && file.endsWith(".js"))).toBe(true);
+
+    const serverModule = (await import(
+      `${pathToFileURL(resolve(root, "dist", "server", "server.js")).href}?test=${Date.now()}`
+    )) as { render(): string };
+    const html = serverModule.render();
+    expect(html).toContain("Vite lifecycle");
+    expect(html).toContain('data-octane-hydrate-when="interaction"');
+
+    const browser = new Window({ url: "https://beast.test/" });
+    const restoreDom = installDomGlobals(browser);
+    const state = globalThis as Record<string, any>;
+    try {
+      state.__beastHydrated = 0;
+      const container = browser.document.createElement("div");
+      container.id = "app";
+      container.innerHTML = html;
+      browser.document.body.append(container);
+      const serverButton = container.querySelector<HTMLButtonElement>("#activate");
+      expect(serverButton).not.toBeNull();
+
+      await import(
+        `${pathToFileURL(resolve(root, "dist", "client", "client.js")).href}?test=${Date.now()}`
+      );
+      expect(container.querySelector("#activate")).toBe(serverButton);
+      serverButton!.dispatchEvent(new browser.MouseEvent("click", { bubbles: true, cancelable: true }));
+
+      await waitFor(
+        () => state.__beastHydrated === 1 && serverButton!.textContent === "Count 1",
+        "Expected the split boundary to hydrate and replay its activating click.",
+      );
+      expect(container.querySelector("#activate")).toBe(serverButton);
+      state.__beastRoot.unmount();
+    } finally {
+      delete state.__beastRoot;
+      delete state.__beastHydrated;
+      restoreDom();
+    }
   });
 
   test("removes only stale manifest outputs and prunes their empty directories", async () => {

@@ -45,7 +45,7 @@ through `import`, `setup`, attributes, and nesting unchanged.
 | Client ownership | Root mount/update/unmount, server-DOM adoption, dormant-boundary activation and event replay, synchronous/test scheduling, cross-container portals, and non-reconciling behavior ownership | Executable Happy DOM lifecycle suite |
 | Server and static rendering | Hydratable/static buffered output, scoped CSS/head channels, Node and Web progressive streams, await-everything output, aborts, deadlines, and complete Node preludes | Executable renderer lifecycle suite |
 | Public entry points | Every tracked name is present in the pinned `octane`, hydration, behavior, server, and static module namespaces | Machine-readable Core API inventory test |
-| Client bundling | Mixed BTSX/TSRX Vite application production build | project integration test |
+| Vite application lifecycle | Mixed BTSX/TSRX production build plus a BTSX SSR render, server-DOM adoption, interaction replay, and compiler-split deferred chunk | Executable project integration tests |
 
 Every golden output is compared byte for byte and compiled with the pinned
 Octane compiler. The focused lifecycle suites execute the non-template entry
@@ -108,14 +108,13 @@ public entry point.
 
 ## Next additions
 
-### 1. Close application-integration gaps
+### 1. Add more bundler integrations
 
-The Vite path has client production coverage, but still needs full lifecycle
-fixtures for server transforms, rendering, hydration, and compiler-split
-deferred hydration.
-After that, add Beast adapters or documented precompile workflows for Octane's
-Rspack and Rsbuild integrations. Framework-specific adapters should follow
-only when the core bundler contracts are stable.
+The Vite path now has production client and server builds, an executable SSR
+render-to-hydration lifecycle, and compiler-split deferred hydration coverage.
+Next, add Beast adapters or documented precompile workflows for Octane's Rspack
+and Rsbuild integrations. Framework-specific adapters should follow only when
+the core bundler contracts are stable.
 
 ### 2. Improve compiler tooling
 
@@ -127,7 +126,7 @@ non-Vite development workflow.
 
 The smallest dependency-aware sequence is:
 
-1. Rspack/Rsbuild integration and SSR/deferred-split application lifecycles.
+1. Rspack/Rsbuild integration.
 2. Source maps and standalone watch mode.
 
 [Quick start]: https://octanejs.dev/docs

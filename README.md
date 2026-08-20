@@ -859,7 +859,9 @@ import { NativePanel } from "./NativePanel.tsrx";
 The Beast pre-transform generates TSRX in memory and passes it to Octane's
 public bundler compiler. Native `.tsrx` modules go through Octane's direct Vite
 integration. HMR invalidation is forwarded for `.btsx` changes, and SSR
-transforms select Octane's server environment.
+transforms select Octane's server environment. Compiler-split `Hydrate`
+children re-enter their originating `.btsx` module through Octane's resource
+query, so production builds can emit and activate the deferred chunk normally.
 
 The `components` option remains available for per-file `componentName` and
 `propsParam` overrides. Source-level props are preferred when a component owns

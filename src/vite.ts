@@ -1,4 +1,4 @@
-import { relative } from "node:path";
+import { dirname, relative, resolve } from "node:path";
 import { createOctaneCompiler } from "octane/compiler/bundler";
 import {
   octane as octaneVite,
@@ -33,6 +33,18 @@ export function beast(options: BeastViteOptions = {}): Plugin {
         warn: (message) => resolved.logger.warn(message),
       });
     },
+    resolveId(source, importer) {
+      if (importer === undefined || !hasHydrateQuery(source)) return null;
+
+      const importerFile = cleanId(importer);
+      const requestedFile = cleanId(source);
+      if (!importerFile.endsWith(".btsx") || !requestedFile.endsWith(".tsrx")) return null;
+
+      const generatedTsrxFile = importerFile.replace(/\.btsx$/u, ".tsrx");
+      if (resolve(dirname(importerFile), requestedFile) !== generatedTsrxFile) return null;
+
+      return `${importerFile}${source.slice(requestedFile.length)}`;
+    },
     transform(source, id, transformOptions) {
       const filename = cleanId(id);
       if (!filename.endsWith(".btsx")) return null;
@@ -47,7 +59,7 @@ export function beast(options: BeastViteOptions = {}): Plugin {
         componentName: configured?.componentName ?? componentNameFromPath(filename),
         ...(configured?.propsParam === undefined ? {} : { propsParam: configured.propsParam }),
       });
-      const tsrxId = filename.replace(/\.btsx$/u, ".tsrx");
+      const tsrxId = `${filename.replace(/\.btsx$/u, ".tsrx")}${id.slice(filename.length)}`;
       const environment = transformOptions?.ssr === true ? "server" : "client";
       const result = octaneCompiler.transform(tsrx, tsrxId, {
         environment,
@@ -77,6 +89,10 @@ export function beastOctane(options: BeastViteOptions = {}): PluginOption {
 
 function cleanId(id: string): string {
   return id.split(/[?#]/u, 1)[0] ?? id;
+}
+
+function hasHydrateQuery(id: string): boolean {
+  return /(?:\?|&)octane-hydrate=/u.test(id.slice(cleanId(id).length));
 }
 
 function toPosix(path: string): string {
