@@ -14,4 +14,6 @@ The equivalent direct `bunx` command is:
 bun x create-beast@latest my-app
 ```
 
-Use `--no-install`, `--no-git`, or `--force` when needed.
+Use `--no-install`, `--no-git`, `--force`, or `--tailwind` when needed.
+
+Add `--tailwind` to scaffold with Tailwind CSS via `@tailwindcss/vite` + `@import "tailwindcss"`.

@@ -1,6 +1,6 @@
 {
   "name": "beast-tsrx",
-  "version": "0.1.0",
+  "version": "0.2.7",
   "description": "An indentation-based frontend that compiles .btsx components to Octane-compatible TSRX.",
   "workspaces": [
     "packages/*"
@@ -16,30 +16,42 @@
     "./vite": {
       "types": "./dist/vite.d.ts",
       "default": "./dist/vite.js"
+    },
+    "./rspack": {
+      "types": "./dist/rspack.d.ts",
+      "default": "./dist/rspack.js"
+    },
+    "./rsbuild": {
+      "types": "./dist/rsbuild.d.ts",
+      "default": "./dist/rsbuild.js"
     }
   },
   "bin": {
-    "beast": "./dist/cli.js"
+    "beast": "dist/cli.js"
   },
   "files": [
     "dist",
+    "docs",
+    "examples",
     "README.md",
     "LICENSE"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.json && tsc -p packages/create-beast/tsconfig.json",
-    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p packages/create-beast/tsconfig.json --noEmit",
+    "build": "tsc -p tsconfig.json && tsc -p packages/create-beast/tsconfig.json && tsc -p packages/language-server/tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p packages/create-beast/tsconfig.json --noEmit && tsc -p packages/language-server/tsconfig.json --noEmit",
     "test": "bun test",
     "check": "bun run typecheck && bun run test && bun run build",
     "prepack": "bun run build",
-    "pack:check": "npm pack --dry-run && npm pack --dry-run --workspace create-beast"
+    "pack:check": "npm pack --dry-run && npm pack --dry-run --workspace create-beast && npm pack --dry-run --workspace beast-language-server"
   },
   "keywords": [
     "btsx",
     "tsrx",
     "octane",
     "compiler",
-    "templates"
+    "templates",
+    "rspack",
+    "rsbuild"
   ],
   "author": "",
   "license": "ISC",
@@ -50,10 +62,26 @@
     "node": ">=22.22.2"
   },
   "peerDependencies": {
-    "octane": "0.1.32",
+    "@octanejs/rsbuild-plugin": "0.1.32",
+    "@octanejs/rspack-plugin": "0.1.32",
+    "@rsbuild/core": "^2.0.0",
+    "@rspack/core": "^2.0.0",
+    "octane": "0.1.37",
     "vite": "^8.0.16"
   },
   "peerDependenciesMeta": {
+    "@octanejs/rsbuild-plugin": {
+      "optional": true
+    },
+    "@octanejs/rspack-plugin": {
+      "optional": true
+    },
+    "@rsbuild/core": {
+      "optional": true
+    },
+    "@rspack/core": {
+      "optional": true
+    },
     "octane": {
       "optional": true
     },
@@ -61,10 +89,21 @@
       "optional": true
     }
   },
+  "dependencies": {
+    "@jridgewell/gen-mapping": "^0.3.13",
+    "@jridgewell/remapping": "^2.3.5",
+    "entities": "^7.0.1"
+  },
   "devDependencies": {
+    "@jridgewell/trace-mapping": "^0.3.31",
+    "@octanejs/rsbuild-plugin": "0.1.32",
+    "@octanejs/rspack-plugin": "0.1.32",
+    "@rsbuild/core": "2.1.13",
+    "@rspack/core": "2.1.10",
     "@types/bun": "^1.3.14",
     "@types/node": "^26.2.0",
-    "octane": "0.1.32",
+    "happy-dom": "^20.11.0",
+    "octane": "0.1.37",
     "typescript": "^5.9.3",
     "vite": "^8.0.16"
   }

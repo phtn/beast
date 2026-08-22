@@ -1,3 +1,4 @@
+props { user, unreadCount, messages }: { user: { name: string; id: string; isAdmin: boolean }; unreadCount: number; messages: { id: string; text: string }[] }
 .card
   .header
     h1 Welcome, #{user.name}

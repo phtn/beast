@@ -1,0 +1,21 @@
+import { ViewTransition, addTransitionType, startTransition, useState } from "octane";
+module
+  type Tab = "overview" | "activity";
+setup const [tab, setTab] = useState<Tab>("overview");
+setup
+  const selectTab = (next: Tab) => {
+    startTransition(() => {
+      addTransitionType(next === "activity" ? "forward" : "backward");
+      setTab(next);
+    });
+  };
+
+section.project-view
+  h2 Project view
+  nav(aria-label="Project sections")
+    button(type="button" aria-current={tab === "overview" ? "page" : undefined} onClick={() => selectTab("overview")}) Overview
+    button(type="button" aria-current={tab === "activity" ? "page" : undefined} onClick={() => selectTab("activity")}) Activity
+  ViewTransition(name="project-panel" enter="panel-enter" exit="panel-exit" update={{ default: "panel-update", forward: "slide-left", backward: "slide-right" }})
+    article.project-panel
+      h3 #{tab === "overview" ? "Overview" : "Activity"}
+      p #{tab === "overview" ? "Overview is ready." : "Recent activity is ready."}

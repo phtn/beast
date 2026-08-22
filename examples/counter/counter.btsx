@@ -1,0 +1,13 @@
+import { useEffect, useMemo, useState } from "octane";
+props { initialCount, step, onCountChange }: { initialCount: number; step: number; onCountChange: (count: number) => void }
+setup const [count, setCount] = useState(initialCount);
+setup const doubled = useMemo(() => count * 2);
+setup useEffect(() => onCountChange(count));
+
+section.counter(aria-live="polite")
+  h2 Hook counter
+  p Current: #{count}
+  p Doubled: #{doubled}
+  .actions
+    button(type="button" onClick={() => setCount(count - step)}) Decrease
+    button(type="button" onClick={() => setCount(count + step)}) Increase

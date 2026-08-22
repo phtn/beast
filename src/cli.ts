@@ -5,14 +5,14 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { compileBeast, componentNameFromPath } from "./compiler.js";
 import { BeastCompileError, formatDiagnostic } from "./diagnostics.js";
-import { buildBeastProject } from "./project.js";
+import { buildBeastProject, watchBeastProject } from "./project.js";
 
 const HELP = `Beast — compile indentation-based BTSX to Octane TSRX
 
 Usage:
   beast compile <input.btsx> [-o output.tsrx] [--props <parameter>] [--no-validate]
   beast <input.btsx> [output.tsrx] [--props <parameter>] [--no-validate]
-  beast build [source-dir] [--out-dir <directory>] [--no-validate]
+  beast build [source-dir] [--out-dir <directory>] [--no-validate] [--watch]
   beast --help
 
 Commands:
@@ -30,17 +30,7 @@ export async function runCli(argv: string[]): Promise<number> {
     if (argv[0] === "build") return await runBuild(argv.slice(1));
     return await runCompile(argv[0] === "compile" ? argv.slice(1) : argv);
   } catch (error) {
-    if (error instanceof BeastCompileError) {
-      let source: string | undefined;
-      try {
-        source = await readFile(error.diagnostic.filename, "utf8");
-      } catch {
-        source = undefined;
-      }
-      console.error(formatDiagnostic(error.diagnostic, source));
-      return 1;
-    }
-    console.error(error instanceof Error ? error.message : String(error));
+    await reportCliError(error);
     return 1;
   }
 }
@@ -82,19 +72,52 @@ async function runBuild(rawArgs: string[]): Promise<number> {
   const args = [...rawArgs];
   const output = takeOption(args, "--out-dir");
   const validate = !takeFlag(args, "--no-validate");
+  const watch = takeFlag(args, "--watch");
   rejectUnknownOptions(args);
   const positional = args.filter((arg) => !arg.startsWith("-"));
   if (positional.length > 1) throw new Error("Build accepts at most one source directory.");
   const root = resolve(positional[0] ?? ".");
-  const result = await buildBeastProject({
+  const options = {
     root,
     ...(output === undefined ? {} : { outDir: resolve(output) }),
     validate,
-  });
-  console.log(
-    `Built ${result.generated.length} BTSX component(s); validated ${result.validatedNativeTsrx.length} native TSRX file(s) in ${result.outDir}`,
-  );
+  };
+  if (watch) {
+    const session = watchBeastProject({
+      ...options,
+      onBuild: reportBuild,
+      onError: (error) => void reportCliError(error),
+    });
+    try {
+      await session.ready;
+    } catch {
+      // The watch remains active so a later edit can recover the build.
+    }
+    return 0;
+  }
+
+  reportBuild(await buildBeastProject(options));
   return 0;
+}
+
+function reportBuild(result: Awaited<ReturnType<typeof buildBeastProject>>): void {
+  console.log(
+    `Built ${result.generated.length} BTSX component(s); removed ${result.removed.length} stale output(s); validated ${result.validatedNativeTsrx.length} native TSRX file(s) in ${result.outDir}`,
+  );
+}
+
+async function reportCliError(error: unknown): Promise<void> {
+  if (error instanceof BeastCompileError) {
+    let source: string | undefined;
+    try {
+      source = await readFile(error.diagnostic.filename, "utf8");
+    } catch {
+      source = undefined;
+    }
+    console.error(formatDiagnostic(error.diagnostic, source));
+    return;
+  }
+  console.error(error instanceof Error ? error.message : String(error));
 }
 
 function takeOption(args: string[], name: string): string | undefined {

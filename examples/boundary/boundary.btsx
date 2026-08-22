@@ -1,0 +1,11 @@
+props { Profile, data }: { Profile: (props: { data: Promise<unknown> }) => unknown; data: Promise<unknown> }
+
+section.profile-boundary
+  try
+    Profile(data={data})
+  pending
+    p(role="status") Loading profile…
+  catch error, reset
+    .error(role="alert")
+      p Could not load profile: #{error instanceof Error ? error.message : String(error)}
+      button(type="button" onClick={reset}) Try again

@@ -1,0 +1,46 @@
+import { Hydrate } from "octane";
+import { condition, idle, initializeHydrationEventCapture, interaction, load, media, never, visible } from "octane/hydration";
+import type { HydrationPrefetchContext } from "octane/hydration";
+module
+  export function prepareHydrationCapture(ownerDocument: Document) {
+    initializeHydrationEventCapture(ownerDocument);
+    initializeHydrationEventCapture(ownerDocument);
+  }
+
+component HydrationPanel
+  props { label }: { label: string }
+  article.hydration-panel
+    h2 #{label}
+    button(type="button") Activate
+
+props { enabled, onHydrated, warm }: { enabled: boolean; onHydrated: () => void; warm: (signal: AbortSignal) => Promise<void> }
+setup
+  const prefetchPanel = async ({ element, preload, signal, waitFor }: HydrationPrefetchContext) => {
+    await preload();
+    const reason = await waitFor(idle({ timeout: 250 }));
+    if (reason === "abort" || signal.aborted) return;
+    void element;
+    await warm(signal);
+  };
+
+fragment
+  Hydrate(when={load()} split={false})
+    HydrationPanel(label="Load")
+  Hydrate(when={idle({ timeout: 1000 })} split={false})
+    HydrationPanel(label="Idle")
+  Hydrate(when={visible({ rootMargin: "300px", threshold: [0, 0.5] })} split={false})
+    HydrationPanel(label="Visible")
+  Hydrate(when={media("(min-width: 64rem)")} split={false})
+    HydrationPanel(label="Media")
+  Hydrate(when={interaction({ events: ["focusin", "click"] })} split={false})
+    HydrationPanel(label="Interaction")
+  Hydrate(when={condition(enabled)} split={false})
+    HydrationPanel(label="Condition")
+  Hydrate(split={false} when={never()})
+    HydrationPanel(label="Never")
+  Hydrate(when={() => window.matchMedia("(pointer: coarse)").matches ? interaction() : visible()} split={false})
+    HydrationPanel(label="Dynamic")
+  Hydrate(when={interaction()} prefetch={idle()} fallback="Preparing editor…" onHydrated={onHydrated})
+    HydrationPanel(label="Split and prefetched")
+  Hydrate(when={visible()} prefetch={prefetchPanel} split={false})
+    HydrationPanel(label="Procedural prefetch")

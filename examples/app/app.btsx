@@ -1,0 +1,12 @@
+import Card from "../card/card.btsx";
+import Status from "../status/status.btsx";
+import { AppProps } from "./types";
+
+props { title, themeClass, user, unreadCount, messages, groups }: AppProps
+
+main#app.shell(class={themeClass})
+  header.hero
+    p.eyebrow Beast composition example
+    h1 #{title}
+  Card(user={user} unreadCount={unreadCount} messages={messages})
+  Status(groups={groups})

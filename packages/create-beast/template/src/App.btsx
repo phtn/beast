@@ -1,5 +1,16 @@
+module
+  interface Props {
+    title: string;
+    links: { id: string, label: string, url: string }[]
+  }
+
+props { title, links }: Props
 main.app
   p.eyebrow BTSX → TSRX → Octane
   h1 #{title}
-  p Start building in src/App.btsx.
-  a.button(href="https://tsrx.dev/" target="_blank" rel="noreferrer") Explore TSRX
+  p Start building in
+    span.arrow →
+    code src/App.btsx.
+  div.flex
+    each link in links key link.id
+      a.button(id={link.id} href={link.url} target="_blank" rel="noreferrer") #{link.label}

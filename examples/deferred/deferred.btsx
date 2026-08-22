@@ -1,0 +1,20 @@
+import { ErrorBoundary, Hydrate, Suspense, lazy } from "octane";
+import { visible } from "octane/hydration";
+module
+  type DashboardProps = { reportId: string };
+  const LazyAnalytics = lazy(() => import("./analytics.tsrx"));
+
+component ReviewSummary
+  props { reportId }: DashboardProps
+  article.review-summary
+    h3 #{"Reviews for " + reportId}
+    button(type="button") Open reviews
+props { reportId }: DashboardProps
+
+ErrorBoundary(fallback="The dashboard could not be loaded.")
+  section.dashboard
+    h2 Async dashboard
+    Suspense(fallback="Loading analytics…")
+      LazyAnalytics(reportId={reportId})
+    Hydrate(when={visible({ rootMargin: "400px" })} fallback="Preparing reviews…" split={false})
+      ReviewSummary(reportId={reportId})

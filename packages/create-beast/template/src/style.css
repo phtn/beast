@@ -23,7 +23,7 @@ body {
 }
 
 .eyebrow {
-  color: #9ca7ff;
+  color: #666666;
   font-size: 0.8rem;
   font-weight: 700;
   letter-spacing: 0.14em;
@@ -45,12 +45,44 @@ p {
   display: inline-flex;
   margin-top: 1rem;
   padding: 0.75rem 1rem;
-  border: 1px solid #5967e8;
   border-radius: 0.6rem;
   color: #f6f7fb;
   text-decoration: none;
 }
 
 .button:hover {
-  background: #5967e8;
+  opacity: 0.8;
+}
+
+.flex {
+  display: flex;
+  gap: 1rem;
+}
+
+#tsrx {
+  background: #680af5;
+  color: #fafafa;
+}
+
+#beast {
+  background: #fafafa;
+  color: #34373a;
+}
+
+#octane {
+  background: #ff415a;
+  color: #fafafa;
+}
+
+code {
+  font-size: 0.9rem;
+  letter-spacing: 0.03em;
+  color: #888888;
+}
+
+.arrow {
+  font-size: 0.8rem;
+  letter-spacing: 0.03em;
+  color: #e5e5e5;
+  padding: 0 10px;
 }

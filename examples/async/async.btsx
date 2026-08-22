@@ -1,0 +1,21 @@
+import { Activity, ErrorBoundary, Suspense, use } from "octane";
+module interface ProfileData { name: string; role: string }
+
+component AsyncProfile
+  props { profile }: { profile: PromiseLike<ProfileData> }
+  setup const resolved = use(profile);
+  article.profile
+    h2 #{resolved.name}
+    p #{resolved.role}
+
+props { profile }: { profile: PromiseLike<ProfileData> }
+section.async-dashboard
+  ErrorBoundary(fallback="Profile failed.")
+    Suspense(fallback="Loading profile…")
+      AsyncProfile(profile={profile})
+  Activity(mode="visible")
+    p Visible activity
+  Activity(mode="hidden")
+    p Hidden activity
+  Activity(mode="prerender")
+    p Prerendered activity

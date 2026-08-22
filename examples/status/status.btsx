@@ -1,10 +1,11 @@
+props { groups }: { groups: { id: string; title: string; status: string; items: { label: string; value: string }[] }[] }
 .status-list
   each group, gi in groups
     .group(key={group.id})
       h2 #{group.title}
-      if group.status === "ok"
+      if group.status === 'ok'
         Badge(tone="green") All good
-      elseif group.status === "warn"
+      elseif group.status === 'warn'
         Badge(tone="yellow" pulse) Needs attention
       else
         Badge(tone="red") Failing
