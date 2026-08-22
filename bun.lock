@@ -57,7 +57,7 @@
         "beast-language-server": "dist/server.js",
       },
       "dependencies": {
-        "beast-tsrx": "0.2.6",
+        "beast-tsrx": "0.2.7",
         "vscode-languageserver": "^10.1.0",
         "vscode-languageserver-textdocument": "^1.0.12",
       },
@@ -241,7 +241,7 @@
 
     "beast-language-server": ["beast-language-server@workspace:packages/language-server"],
 
-    "beast-tsrx": ["beast-tsrx@0.2.6", "", { "dependencies": { "@jridgewell/gen-mapping": "^0.3.13", "@jridgewell/remapping": "^2.3.5", "entities": "^7.0.1" }, "peerDependencies": { "@octanejs/rsbuild-plugin": "0.1.32", "@octanejs/rspack-plugin": "0.1.32", "@rsbuild/core": "^2.0.0", "@rspack/core": "^2.0.0", "octane": "0.1.37", "vite": "^8.0.16" }, "optionalPeers": ["@octanejs/rsbuild-plugin", "@octanejs/rspack-plugin", "@rsbuild/core", "@rspack/core", "octane", "vite"], "bin": { "beast": "dist/cli.js" } }, "sha512-HkAKv1cTvxFXjN58dm00mCaenIjWEtZCLQwOEYqmlB+AetgbvpIaUsmyK94n5O77XDFOzF91tigVqlCiRDvbsg=="],
+    "beast-tsrx": ["beast-tsrx@0.2.7", "", { "dependencies": { "@jridgewell/gen-mapping": "^0.3.13", "@jridgewell/remapping": "^2.3.5", "entities": "^7.0.1" }, "peerDependencies": { "@octanejs/rsbuild-plugin": "0.1.32", "@octanejs/rspack-plugin": "0.1.32", "@rsbuild/core": "^2.0.0", "@rspack/core": "^2.0.0", "octane": "0.1.37", "vite": "^8.0.16" }, "optionalPeers": ["@octanejs/rsbuild-plugin", "@octanejs/rspack-plugin", "@rsbuild/core", "@rspack/core", "octane", "vite"], "bin": { "beast": "dist/cli.js" } }, "sha512-2UJB5RnsDfJq4DSb54xCQxswjNKlK/9g+Uf29mAqI3ZS6xygBtNkBB1EQvhdoSu2SKqrq7lqbkojmT5eLVcqYA=="],
 
     "buffer-image-size": ["buffer-image-size@0.6.4", "", { "dependencies": { "@types/node": "*" } }, "sha512-nEh+kZOPY1w+gcCMobZ6ETUp9WfibndnosbpwB1iJk/8Gt5ZF2bhS6+B6bPYz424KtwsR6Rflc3tCz1/ghX2dQ=="],
 

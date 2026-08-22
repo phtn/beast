@@ -40,7 +40,7 @@
     "node": ">=22.22.2"
   },
   "dependencies": {
-    "beast-tsrx": "0.2.6",
+    "beast-tsrx": "0.2.7",
     "vscode-languageserver": "^10.1.0",
     "vscode-languageserver-textdocument": "^1.0.12"
   },
