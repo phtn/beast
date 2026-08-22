@@ -13,6 +13,7 @@ import type {
   SetupDeclaration,
   SourcePosition,
   SourceSpan,
+  SourceTextFragment,
   StyleNode,
   SwitchBranch,
   SwitchNode,
@@ -26,13 +27,21 @@ import { BeastCompileError } from "./diagnostics.js";
 
 interface LogicalLine {
   content: string;
+  fragments: LogicalLineFragment[];
   indent: number;
   lineNo: number;
   offset: number;
 }
 
+interface LogicalLineFragment {
+  logicalStart: number;
+  logicalEnd: number;
+  source: SourceSpan;
+}
+
 interface SourceBlockResult {
   code: string;
+  fragments: SourceTextFragment[];
   start: SourcePosition;
 }
 
@@ -88,11 +97,7 @@ class Parser {
         end:
           last === undefined
             ? { offset: 0, line: 1, column: 1 }
-            : {
-                offset: last.offset + last.content.length,
-                line: last.lineNo,
-                column: last.indent + last.content.length + 1,
-              },
+            : lineSpan(last).end,
       },
     };
   }
@@ -116,6 +121,7 @@ class Parser {
         declarations.push({
           kind: "import",
           code: line.content,
+          codeFragments: sourceTextFragments(line, 0, line.content.length),
           lineNo: line.lineNo,
           span: lineSpan(line),
         });
@@ -159,6 +165,7 @@ class Parser {
           kind: "module",
           code: source.code,
           codeStart: source.start,
+          codeFragments: source.fragments,
           lineNo: line.lineNo,
           span: lineSpan(line),
         });
@@ -256,10 +263,16 @@ class Parser {
         line,
       );
     }
+    const parameterStart = line.content.indexOf(parameter, "props".length);
     this.index += 1;
     return {
       kind: "props",
       parameter,
+      parameterFragments: sourceTextFragments(
+        line,
+        parameterStart,
+        parameterStart + parameter.length,
+      ),
       lineNo: line.lineNo,
       span: lineSpan(line),
     };
@@ -279,6 +292,7 @@ class Parser {
       kind: "setup",
       code: source.code,
       codeStart: source.start,
+      codeFragments: source.fragments,
       lineNo: line.lineNo,
       span: lineSpan(line),
     };
@@ -310,28 +324,120 @@ class Parser {
     while (blockLines.at(-1)?.raw === "") blockLines.pop();
     if (blockLines.length === 0) this.fail(code, message, line);
 
+    const authoredLines = blockLines.filter((blockLine) => {
+      if (blockLine.raw.length === 0) return false;
+      const leading = blockLine.raw.match(/^ */u)?.[0].length ?? 0;
+      return !blockLine.raw.slice(leading).startsWith("~");
+    });
+    if (authoredLines.length === 0) this.fail(code, message, line);
     const sourceIndent = Math.min(
-      ...blockLines
-        .filter((blockLine) => blockLine.raw.length > 0)
-        .map((blockLine) => blockLine.raw.match(/^ */u)?.[0].length ?? 0),
+      ...authoredLines.map(
+        (blockLine) => blockLine.raw.match(/^ */u)?.[0].length ?? 0,
+      ),
     );
-    const sourceCode = blockLines
-      .map((blockLine) =>
-        blockLine.raw.length === 0 ? "" : blockLine.raw.slice(sourceIndent),
-      )
-      .join("\n");
+
+    interface NormalizedBlockLine {
+      code: string;
+      fragments: SourceTextFragment[];
+    }
+    const normalized: NormalizedBlockLine[] = [];
+    let previousCodeLine: NormalizedBlockLine | undefined;
+    for (const blockLine of blockLines) {
+      if (blockLine.raw.length === 0) {
+        normalized.push({ code: "", fragments: [] });
+        continue;
+      }
+
+      const leading = blockLine.raw.match(/^ */u)?.[0].length ?? 0;
+      const content = blockLine.raw.slice(leading);
+      if (content.startsWith("~")) {
+        const continuation = continuationPayload(content);
+        if (
+          continuation === null ||
+          continuation.text.startsWith("//")
+        ) {
+          continue;
+        }
+        if (previousCodeLine === undefined) {
+          throw new BeastCompileError({
+            code: "BEAST1004_ORPHAN_CONTINUATION",
+            severity: "error",
+            message: "A continuation line starting with `~` must follow authored source.",
+            filename: this.filename,
+            span: spanAt(
+              (this.physicalLineOffsets[blockLine.lineIndex] ?? 0) + leading,
+              blockLine.lineIndex + 1,
+              leading + 1,
+              Math.max(1, content.length),
+            ),
+          });
+        }
+        const fragmentStart = previousCodeLine.code.length + 1;
+        previousCodeLine.code += ` ${continuation.text}`;
+        previousCodeLine.fragments.push({
+          start: fragmentStart,
+          end: fragmentStart + continuation.text.length,
+          source: spanAt(
+            (this.physicalLineOffsets[blockLine.lineIndex] ?? 0) +
+              leading +
+              continuation.sourceStart,
+            blockLine.lineIndex + 1,
+            leading + continuation.sourceStart + 1,
+            continuation.text.length,
+          ),
+        });
+        continue;
+      }
+
+      const blockCode = blockLine.raw.slice(sourceIndent);
+      const normalizedLine: NormalizedBlockLine = {
+        code: blockCode,
+        fragments: blockCode.length === 0
+          ? []
+          : [
+              {
+                start: 0,
+                end: blockCode.length,
+                source: spanAt(
+                  (this.physicalLineOffsets[blockLine.lineIndex] ?? 0) + sourceIndent,
+                  blockLine.lineIndex + 1,
+                  sourceIndent + 1,
+                  blockCode.length,
+                ),
+              },
+            ],
+      };
+      normalized.push(normalizedLine);
+      if (!blockCode.trimStart().startsWith("//")) previousCodeLine = normalizedLine;
+    }
+
+    while (normalized[0]?.code === "") normalized.shift();
+    while (normalized.at(-1)?.code === "") normalized.pop();
+    if (normalized.length === 0) this.fail(code, message, line);
+
+    const fragments: SourceTextFragment[] = [];
+    let codeOffset = 0;
+    for (const normalizedLine of normalized) {
+      for (const fragment of normalizedLine.fragments) {
+        fragments.push({
+          start: codeOffset + fragment.start,
+          end: codeOffset + fragment.end,
+          source: fragment.source,
+        });
+      }
+      codeOffset += normalizedLine.code.length + 1;
+    }
+    const sourceCode = normalized.map((blockLine) => blockLine.code).join("\n");
 
     while ((this.lines[this.index]?.lineNo ?? Infinity) <= physicalIndex) {
       this.index += 1;
     }
-    const firstLineIndex = blockLines[0]?.lineIndex ?? line.lineNo;
+    const start = fragments[0]?.source.start;
+    if (start === undefined) this.fail(code, message, line);
     return {
       code: sourceCode,
-      start: {
-        offset: (this.physicalLineOffsets[firstLineIndex] ?? 0) + sourceIndent,
-        line: firstLineIndex + 1,
-        column: sourceIndent + 1,
-      },
+      fragments,
+      start,
     };
   }
 
@@ -448,6 +554,7 @@ class Parser {
       kind: "style",
       css: source.code,
       codeStart: source.start,
+      cssFragments: source.fragments,
       lineNo: line.lineNo,
       span: lineSpan(line),
     };
@@ -881,13 +988,19 @@ function isSetupDeclaration(content: string): boolean {
 function inlineSource(line: LogicalLine, keyword: "module" | "setup"): SourceBlockResult {
   const code = line.content.slice(keyword.length).trim();
   const relativeOffset = line.content.indexOf(code, keyword.length);
+  const fragments = sourceTextFragments(
+    line,
+    relativeOffset,
+    relativeOffset + code.length,
+  );
+  const start = fragments[0]?.source.start;
+  if (start === undefined) {
+    throw new Error(`Unable to locate inline ${keyword} source.`);
+  }
   return {
     code,
-    start: {
-      offset: line.offset + relativeOffset,
-      line: line.lineNo,
-      column: line.indent + relativeOffset + 1,
-    },
+    fragments,
+    start,
   };
 }
 
@@ -899,8 +1012,20 @@ function isCatchBranch(content: string): boolean {
   return content === "catch" || content.startsWith("catch ") || content.startsWith("catch(");
 }
 
+function continuationPayload(
+  content: string,
+): { sourceStart: number; text: string } | null {
+  if (!content.startsWith("~")) return null;
+  let sourceStart = 1;
+  while (content[sourceStart] === " " || content[sourceStart] === "\t") {
+    sourceStart += 1;
+  }
+  const text = content.slice(sourceStart).trimEnd();
+  return text.length === 0 ? null : { sourceStart, text };
+}
+
 function createLogicalLines(source: string, filename: string): LogicalLine[] {
-  const result: LogicalLine[] = [];
+  const rawLines: LogicalLine[] = [];
   let offset = 0;
   const physicalLines = source.split("\n");
   for (let index = 0; index < physicalLines.length; index += 1) {
@@ -918,14 +1043,59 @@ function createLogicalLines(source: string, filename: string): LogicalLine[] {
     }
     const content = raw.slice(leading.length).trimEnd();
     if (content.length > 0 && !content.startsWith("//")) {
-      result.push({
+      rawLines.push({
         content,
+        fragments: [
+          {
+            logicalStart: 0,
+            logicalEnd: content.length,
+            source: spanAt(
+              offset + leading.length,
+              index + 1,
+              leading.length + 1,
+              content.length,
+            ),
+          },
+        ],
         indent: leading.length,
         lineNo: index + 1,
         offset: offset + leading.length,
       });
     }
     offset += raw.length + 1;
+  }
+  const result: LogicalLine[] = [];
+  for (const line of rawLines) {
+    if (line.content.startsWith("~")) {
+      const prev = result[result.length - 1];
+      if (prev === undefined || line.indent <= prev.indent) {
+        throw new BeastCompileError({
+          code: "BEAST1004_ORPHAN_CONTINUATION",
+          severity: "error",
+          message: "A continuation line starting with `~` must follow an indented parent line.",
+          filename,
+          span: lineSpan(line),
+        });
+      }
+      const continuation = continuationPayload(line.content);
+      if (continuation === null || continuation.text.startsWith("//")) continue;
+      const logicalStart = prev.content.length + 1;
+      prev.content += ` ${continuation.text}`;
+      const sourceStart = line.fragments[0]?.source.start;
+      if (sourceStart === undefined) continue;
+      prev.fragments.push({
+        logicalStart,
+        logicalEnd: logicalStart + continuation.text.length,
+        source: spanAt(
+          sourceStart.offset + continuation.sourceStart,
+          sourceStart.line,
+          sourceStart.column + continuation.sourceStart,
+          continuation.text.length,
+        ),
+      });
+      continue;
+    }
+    result.push(line);
   }
   return result;
 }
@@ -1162,58 +1332,173 @@ function parseTextSpans(text: string, line: LogicalLine, filename: string): Text
 function findMatchingDelimiter(input: string, openingIndex: number): number {
   const opening = input[openingIndex];
   if (opening !== "(" && opening !== "{" && opening !== "[") return -1;
-  const stack = [opening];
-  let quote: string | null = null;
-  let escaped = false;
-  for (let index = openingIndex + 1; index < input.length; index += 1) {
+  const closing = opening === "(" ? ")" : opening === "{" ? "}" : "]";
+  return scanJavaScriptRegion(input, openingIndex + 1, closing).closingIndex;
+}
+
+function findTopLevelSequence(input: string, sequence: string): number {
+  return scanJavaScriptRegion(input, 0, null, sequence).foundIndex;
+}
+
+interface JavaScriptScanResult {
+  closingIndex: number;
+  foundIndex: number;
+}
+
+function scanJavaScriptRegion(
+  input: string,
+  start: number,
+  closing: ")" | "}" | "]" | null,
+  sequence?: string,
+): JavaScriptScanResult {
+  let canStartRegex = true;
+  let index = start;
+  while (index < input.length) {
+    if (sequence !== undefined && input.startsWith(sequence, index)) {
+      return { closingIndex: -1, foundIndex: index };
+    }
+
     const char = input[index] ?? "";
-    if (quote !== null) {
-      if (escaped) {
-        escaped = false;
-      } else if (char === "\\") {
-        escaped = true;
-      } else if (char === quote) {
-        quote = null;
-      }
+    const next = input[index + 1] ?? "";
+    if (/\s/u.test(char)) {
+      index += 1;
       continue;
     }
-    if (char === '"' || char === "'" || char === "`") {
-      quote = char;
+
+    if (char === "/" && next === "/") {
+      const newline = input.indexOf("\n", index + 2);
+      index = newline === -1 ? input.length : newline + 1;
+      continue;
+    }
+    if (char === "/" && next === "*") {
+      const end = input.indexOf("*/", index + 2);
+      if (end === -1) return { closingIndex: -1, foundIndex: -1 };
+      index = end + 2;
+      continue;
+    }
+    if (char === '"' || char === "'") {
+      index = skipQuoted(input, index, char);
+      if (index === -1) return { closingIndex: -1, foundIndex: -1 };
+      canStartRegex = false;
+      continue;
+    }
+    if (char === "`") {
+      index = skipTemplate(input, index);
+      if (index === -1) return { closingIndex: -1, foundIndex: -1 };
+      canStartRegex = false;
+      continue;
+    }
+    if (char === "/" && canStartRegex) {
+      index = skipRegex(input, index);
+      if (index === -1) return { closingIndex: -1, foundIndex: -1 };
+      canStartRegex = false;
       continue;
     }
     if (char === "(" || char === "{" || char === "[") {
-      stack.push(char);
+      const nestedClosing = char === "(" ? ")" : char === "{" ? "}" : "]";
+      const nested = scanJavaScriptRegion(input, index + 1, nestedClosing);
+      if (nested.closingIndex === -1) return { closingIndex: -1, foundIndex: -1 };
+      index = nested.closingIndex + 1;
+      canStartRegex = false;
       continue;
     }
     if (char === ")" || char === "}" || char === "]") {
-      const expected = char === ")" ? "(" : char === "}" ? "{" : "[";
-      if (stack.at(-1) !== expected) return -1;
-      stack.pop();
-      if (stack.length === 0) return index;
+      return char === closing
+        ? { closingIndex: index, foundIndex: -1 }
+        : { closingIndex: -1, foundIndex: -1 };
+    }
+    if (/[A-Za-z_$]/u.test(char)) {
+      const identifier = input.slice(index).match(/^[A-Za-z_$][A-Za-z0-9_$]*/u)?.[0] ?? char;
+      canStartRegex = REGEX_PREFIX_KEYWORDS.has(identifier);
+      index += identifier.length;
+      continue;
+    }
+    if (/[0-9]/u.test(char)) {
+      const number = input.slice(index).match(/^(?:0[xob][0-9a-f]+|\d+(?:\.\d*)?(?:e[+-]?\d+)?)/iu)?.[0];
+      index += number?.length ?? 1;
+      canStartRegex = false;
+      continue;
+    }
+
+    if (char === "/") {
+      canStartRegex = true;
+      index += next === "=" ? 2 : 1;
+      continue;
+    }
+    canStartRegex = /[=,:;!?&|+\-*%~^<>]/u.test(char);
+    index += 1;
+  }
+  return { closingIndex: closing === null ? input.length : -1, foundIndex: -1 };
+}
+
+const REGEX_PREFIX_KEYWORDS = new Set([
+  "await",
+  "case",
+  "delete",
+  "do",
+  "else",
+  "in",
+  "instanceof",
+  "new",
+  "return",
+  "throw",
+  "typeof",
+  "void",
+  "yield",
+]);
+
+function skipQuoted(input: string, opening: number, quote: string): number {
+  for (let index = opening + 1; index < input.length; index += 1) {
+    const char = input[index] ?? "";
+    if (char === "\\") {
+      index += 1;
+      continue;
+    }
+    if (char === quote) return index + 1;
+    if (char === "\n") return -1;
+  }
+  return -1;
+}
+
+function skipTemplate(input: string, opening: number): number {
+  for (let index = opening + 1; index < input.length; index += 1) {
+    const char = input[index] ?? "";
+    if (char === "\\") {
+      index += 1;
+      continue;
+    }
+    if (char === "`") return index + 1;
+    if (char === "$" && input[index + 1] === "{") {
+      const expression = scanJavaScriptRegion(input, index + 2, "}");
+      if (expression.closingIndex === -1) return -1;
+      index = expression.closingIndex;
     }
   }
   return -1;
 }
 
-function findTopLevelSequence(input: string, sequence: string): number {
-  const stack: string[] = [];
-  let quote: string | null = null;
-  let escaped = false;
-  for (let index = 0; index <= input.length - sequence.length; index += 1) {
+function skipRegex(input: string, opening: number): number {
+  let inCharacterClass = false;
+  for (let index = opening + 1; index < input.length; index += 1) {
     const char = input[index] ?? "";
-    if (quote !== null) {
-      if (escaped) escaped = false;
-      else if (char === "\\") escaped = true;
-      else if (char === quote) quote = null;
+    if (char === "\\") {
+      index += 1;
       continue;
     }
-    if (char === '"' || char === "'" || char === "`") {
-      quote = char;
+    if (char === "\n") return -1;
+    if (char === "[") {
+      inCharacterClass = true;
       continue;
     }
-    if (char === "(" || char === "{" || char === "[") stack.push(char);
-    else if (char === ")" || char === "}" || char === "]") stack.pop();
-    else if (stack.length === 0 && input.startsWith(sequence, index)) return index;
+    if (char === "]") {
+      inCharacterClass = false;
+      continue;
+    }
+    if (char === "/" && !inCharacterClass) {
+      let end = index + 1;
+      while (/[A-Za-z]/u.test(input[end] ?? "")) end += 1;
+      return end;
+    }
   }
   return -1;
 }
@@ -1244,16 +1529,74 @@ function extractSingleRootKey(
 }
 
 function lineSpan(line: LogicalLine): SourceSpan {
-  return spanAt(line.offset, line.lineNo, line.indent + 1, Math.max(1, line.content.length));
+  const first = line.fragments[0]?.source.start;
+  const last = line.fragments.at(-1)?.source.end;
+  if (first !== undefined && last !== undefined) return { start: first, end: last };
+  return spanAt(line.offset, line.lineNo, line.indent + 1, 1);
 }
 
 function attributeSpan(line: LogicalLine, start: number, end: number): SourceSpan {
-  return spanAt(
-    line.offset + start,
-    line.lineNo,
-    line.indent + start + 1,
-    Math.max(1, end - start),
-  );
+  const spanStart = logicalPosition(line, start, "start");
+  const spanEnd = logicalPosition(line, Math.max(start + 1, end), "end");
+  return { start: spanStart, end: spanEnd };
+}
+
+function sourceTextFragments(
+  line: LogicalLine,
+  start: number,
+  end: number,
+): SourceTextFragment[] {
+  const fragments: SourceTextFragment[] = [];
+  for (const fragment of line.fragments) {
+    const overlapStart = Math.max(start, fragment.logicalStart);
+    const overlapEnd = Math.min(end, fragment.logicalEnd);
+    if (overlapStart >= overlapEnd) continue;
+    const sourceDelta = overlapStart - fragment.logicalStart;
+    const width = overlapEnd - overlapStart;
+    fragments.push({
+      start: overlapStart - start,
+      end: overlapEnd - start,
+      source: spanAt(
+        fragment.source.start.offset + sourceDelta,
+        fragment.source.start.line,
+        fragment.source.start.column + sourceDelta,
+        width,
+      ),
+    });
+  }
+  return fragments;
+}
+
+function logicalPosition(
+  line: LogicalLine,
+  logicalOffset: number,
+  bias: "start" | "end",
+): SourcePosition {
+  let previous: LogicalLineFragment | undefined;
+  for (const fragment of line.fragments) {
+    if (logicalOffset < fragment.logicalStart) {
+      return bias === "start"
+        ? fragment.source.start
+        : (previous?.source.end ?? fragment.source.start);
+    }
+    if (logicalOffset <= fragment.logicalEnd) {
+      const delta = Math.min(
+        logicalOffset - fragment.logicalStart,
+        fragment.logicalEnd - fragment.logicalStart,
+      );
+      return {
+        offset: fragment.source.start.offset + delta,
+        line: fragment.source.start.line,
+        column: fragment.source.start.column + delta,
+      };
+    }
+    previous = fragment;
+  }
+  return previous?.source.end ?? {
+    offset: line.offset,
+    line: line.lineNo,
+    column: line.indent + 1,
+  };
 }
 
 function spanAt(offset: number, line: number, column: number, width: number): SourceSpan {

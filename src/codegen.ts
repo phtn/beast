@@ -9,6 +9,7 @@ import type {
   IfNode,
   NamedAttr,
   SourcePosition,
+  SourceTextFragment,
   StyleNode,
   SwitchNode,
   SetupDeclaration,
@@ -110,13 +111,13 @@ function generateLines(document: BeastDocument, options: GenerateOptions): Gener
   for (const declaration of document.declarations) {
     if (declaration.kind === "import" || declaration.kind === "module") {
       lines.push(
-        ...declaration.code.split("\n").map((code, index) =>
-          mappedLine(
-            code,
-            declaration.kind === "module"
-              ? embeddedPosition(declaration.codeStart, index, code)
-              : declaration.span.start,
-          ),
+        ...mappedSourceTextLines(
+          declaration.code,
+          declaration.codeFragments,
+          "",
+          declaration.kind === "module"
+            ? declaration.codeStart
+            : declaration.span.start,
         ),
       );
     }
@@ -167,16 +168,14 @@ function generateComponent(
     .map((code) => mappedLine(code, source));
   if (setup.length > 0) {
     for (const declaration of setup) {
-      for (const [index, codeLine] of declaration.code.split("\n").entries()) {
-        lines.push(
-          codeLine.length === 0
-            ? unmappedLine("")
-            : mappedLine(
-                `${indent(1)}${codeLine}`,
-                embeddedPosition(declaration.codeStart, index, codeLine),
-              ),
-        );
-      }
+      lines.push(
+        ...mappedSourceTextLines(
+          declaration.code,
+          declaration.codeFragments,
+          indent(1),
+          declaration.codeStart,
+        ),
+      );
     }
     lines.push(unmappedLine(""));
   }
@@ -230,16 +229,14 @@ function generateFragment(
 
 function generateStyle(node: StyleNode, depth: number): GeneratedLine[] {
   const lines = [mappedLine(`${indent(depth)}<style>`, node.span.start)];
-  for (const [index, cssLine] of node.css.split("\n").entries()) {
-    lines.push(
-      cssLine.length === 0
-        ? unmappedLine("")
-        : mappedLine(
-            `${indent(depth + 1)}${cssLine}`,
-            embeddedPosition(node.codeStart, index, cssLine),
-          ),
-    );
-  }
+  lines.push(
+    ...mappedSourceTextLines(
+      node.css,
+      node.cssFragments,
+      indent(depth + 1),
+      node.codeStart,
+    ),
+  );
   lines.push(mappedLine(`${indent(depth)}</style>`, node.span.start));
   return lines;
 }
@@ -483,6 +480,52 @@ function mappedLine(code: string, source: SourcePosition): GeneratedLine {
 
 function unmappedLine(code: string): GeneratedLine {
   return { code, mappings: [] };
+}
+
+function mappedSourceTextLines(
+  text: string,
+  fragments: readonly SourceTextFragment[],
+  prefix: string,
+  fallback: SourcePosition,
+): GeneratedLine[] {
+  const lines: GeneratedLine[] = [];
+  let lineStart = 0;
+  for (const [lineOffset, codeLine] of text.split("\n").entries()) {
+    if (codeLine.length === 0) {
+      lines.push(unmappedLine(""));
+      lineStart += 1;
+      continue;
+    }
+
+    const lineEnd = lineStart + codeLine.length;
+    const mappings: GeneratedMapping[] = [];
+    for (const fragment of fragments) {
+      if (fragment.start < lineStart || fragment.start >= lineEnd) continue;
+      const fragmentText = text.slice(fragment.start, Math.min(fragment.end, lineEnd));
+      const leading = fragmentText.match(/^\s*/u)?.[0].length ?? 0;
+      if (leading >= fragmentText.length) continue;
+      mappings.push({
+        column: prefix.length + fragment.start - lineStart + leading,
+        source: {
+          offset: fragment.source.start.offset + leading,
+          line: fragment.source.start.line,
+          column: fragment.source.start.column + leading,
+        },
+      });
+    }
+    if (mappings.length === 0) {
+      const generated = mappedLine(
+        `${prefix}${codeLine}`,
+        embeddedPosition(fallback, lineOffset, codeLine),
+      );
+      lines.push(generated);
+    } else {
+      mappings.sort((left, right) => left.column - right.column);
+      lines.push({ code: `${prefix}${codeLine}`, mappings });
+    }
+    lineStart = lineEnd + 1;
+  }
+  return lines;
 }
 
 function embeddedPosition(

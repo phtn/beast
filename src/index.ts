@@ -17,6 +17,7 @@ export type {
   SetupDeclaration,
   SourcePosition,
   SourceSpan,
+  SourceTextFragment,
   SpreadAttr,
   StyleNode,
   SwitchBranch,

@@ -9,6 +9,17 @@ export interface SourceSpan {
   end: SourcePosition;
 }
 
+/**
+ * Maps a contiguous slice of normalized Beast text back to the authored
+ * source. Continuations introduce unmapped separator spaces between slices,
+ * so a single SourceSpan is not sufficient for embedded TypeScript or CSS.
+ */
+export interface SourceTextFragment {
+  start: number;
+  end: number;
+  source: SourceSpan;
+}
+
 export type AttrValue =
   | { type: "string"; value: string }
   | { type: "expr"; code: string }
@@ -41,23 +52,27 @@ interface BaseNode {
 export interface ImportDeclaration extends BaseNode {
   kind: "import";
   code: string;
+  codeFragments: SourceTextFragment[];
 }
 
 export interface ModuleDeclaration extends BaseNode {
   kind: "module";
   code: string;
   codeStart: SourcePosition;
+  codeFragments: SourceTextFragment[];
 }
 
 export interface PropsDeclaration extends BaseNode {
   kind: "props";
   parameter: string;
+  parameterFragments: SourceTextFragment[];
 }
 
 export interface SetupDeclaration extends BaseNode {
   kind: "setup";
   code: string;
   codeStart: SourcePosition;
+  codeFragments: SourceTextFragment[];
 }
 
 export interface ComponentDeclaration extends BaseNode {
@@ -100,6 +115,7 @@ export interface StyleNode extends BaseNode {
   kind: "style";
   css: string;
   codeStart: SourcePosition;
+  cssFragments: SourceTextFragment[];
 }
 
 export interface IfBranch {

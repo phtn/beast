@@ -195,6 +195,76 @@ describe('BTSX to TSRX', () => {
     expect(originalFor('color: red')).toMatchObject({ line: 11, column: 6 })
   })
 
+  test('normalizes continuations without losing authored source locations', () => {
+    const filename = '/project/src/Continued.btsx'
+    const source = [
+      'module',
+      '  const joined = "a"',
+      '    ~ + "b";',
+      'setup const total = value',
+      '  ~ + fallback;',
+      'fragment',
+      '  p #{joined + total}',
+      '  style',
+      '    .continued {',
+      '      ~ color: red;',
+      '      ~ }'
+    ].join('\n') + '\n'
+    const result = compileBeastResult(source, { filename })
+
+    const moduleDeclaration = result.ast.declarations.find((item) => item.kind === 'module')
+    const setupDeclaration = result.ast.declarations.find((item) => item.kind === 'setup')
+    const fragment = result.ast.children[0]
+    const style = fragment?.kind === 'fragment'
+      ? fragment.children.find((item) => item.kind === 'style')
+      : undefined
+    expect(moduleDeclaration).toMatchObject({
+      code: 'const joined = "a" + "b";',
+      codeFragments: [
+        { start: 0, source: { start: { line: 2, column: 3 } } },
+        { start: 19, source: { start: { line: 3, column: 7 } } }
+      ]
+    })
+    expect(setupDeclaration).toMatchObject({
+      code: 'const total = value + fallback;',
+      span: { end: { line: 5, column: 16 } }
+    })
+    expect(style).toMatchObject({ css: '.continued { color: red; }' })
+
+    const generatedLines = result.code.split('\n')
+    const map = new TraceMap(result.map)
+    const originalFor = (lineText: string, segment: string) => {
+      const lineIndex = generatedLines.findIndex((line) => line.includes(lineText))
+      if (lineIndex === -1) throw new Error(`Missing generated line containing ${lineText}.`)
+      const generatedLine = generatedLines[lineIndex] ?? ''
+      return originalPositionFor(map, {
+        line: lineIndex + 1,
+        column: generatedLine.indexOf(segment)
+      })
+    }
+
+    expect(originalFor('const joined', '+ "b"')).toMatchObject({ line: 3, column: 6 })
+    expect(originalFor('const total', '+ fallback')).toMatchObject({ line: 5, column: 4 })
+    expect(originalFor('.continued', 'color')).toMatchObject({ line: 10, column: 8 })
+  })
+
+  test('balances regexes, comments, and nested templates in interpolations', () => {
+    const source = [
+      'p Regex class #{/[}]/.test(value)}',
+      'p Return regex #{(() => { return /}/.test(value) })()}',
+      'p Comment #{value /* } is not a delimiter */ + 1}',
+      'p Template #{`outer ${`inner ${value}`}`}'
+    ].join('\n') + '\n'
+
+    expect(() => compileBeast(source, { filename: 'Expressions.btsx' })).not.toThrow()
+  })
+
+  test('rejects non-indented continuation markers even after valid content', () => {
+    const error = getCompileError('p Parent\n~ orphan\n', 'OrphanContinuation.btsx')
+    expect(error.diagnostic.code).toBe('BEAST1004_ORPHAN_CONTINUATION')
+    expect(error.diagnostic.span.start).toMatchObject({ line: 2, column: 1 })
+  })
+
   test('emits explicit fragments and verbatim scoped style blocks', async () => {
     const filename = resolve('examples/styling/styling.btsx')
     const source = await readFile(filename, 'utf8')
