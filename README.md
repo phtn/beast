@@ -1035,6 +1035,22 @@ The CLI renders the failing source line with a caret marker. Syntax that Beast
 stores as embedded TypeScript source receives its final language-level
 validation from Octane.
 
+## Language server
+
+`beast-language-server` provides editor-independent LSP support for BTSX:
+
+```bash
+npm install --save-dev beast-language-server
+beast-language-server --stdio
+```
+
+The first release provides Beast compiler diagnostics; Beast keyword, HTML,
+component, prop, and import-path completion; component auto-import edits; go
+to definition; import document links; hover details; and workspace component
+references. TypeScript expression semantics will build on the compiler's
+BTSX-to-TSRX source mappings rather than returning generated-code positions to
+editors.
+
 ## Compatibility
 
 | Tool | Supported version | Role |
@@ -1099,6 +1115,10 @@ beast/
 │   ├── src/index.ts             # Project creator CLI and API
 │   ├── template/                # Vite, Octane, TSRX, and BTSX starter
 │   └── tests/create.test.ts      # Creator safety and output tests
+├── packages/language-server/
+│   ├── src/language-service.ts  # Beast-aware workspace features
+│   ├── src/server.ts            # LSP stdio adapter
+│   └── tests/                    # Completion, navigation, and diagnostic tests
 ├── examples/
 │   ├── README.md                # Example index and usage notes
 │   ├── actions/                 # Form actions, optimistic state, and reset

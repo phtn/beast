@@ -1,6 +1,6 @@
 {
   "name": "beast-tsrx",
-  "version": "0.2.4",
+  "version": "0.2.6",
   "description": "An indentation-based frontend that compiles .btsx components to Octane-compatible TSRX.",
   "workspaces": [
     "packages/*"
@@ -37,12 +37,12 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.json && tsc -p packages/create-beast/tsconfig.json",
-    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p packages/create-beast/tsconfig.json --noEmit",
+    "build": "tsc -p tsconfig.json && tsc -p packages/create-beast/tsconfig.json && tsc -p packages/language-server/tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p packages/create-beast/tsconfig.json --noEmit && tsc -p packages/language-server/tsconfig.json --noEmit",
     "test": "bun test",
     "check": "bun run typecheck && bun run test && bun run build",
     "prepack": "bun run build",
-    "pack:check": "npm pack --dry-run && npm pack --dry-run --workspace create-beast"
+    "pack:check": "npm pack --dry-run && npm pack --dry-run --workspace create-beast && npm pack --dry-run --workspace beast-language-server"
   },
   "keywords": [
     "btsx",
