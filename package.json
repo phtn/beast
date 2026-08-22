@@ -1,6 +1,6 @@
 {
   "name": "beast-tsrx",
-  "version": "0.2.5",
+  "version": "0.2.6",
   "description": "An indentation-based frontend that compiles .btsx components to Octane-compatible TSRX.",
   "workspaces": [
     "packages/*"

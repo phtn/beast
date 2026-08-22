@@ -762,11 +762,93 @@ completion. The renderer suite also verifies CSP nonces, request aborts,
 per-render deadlines, and the global `setSsrSuspenseTimeout()` /
 `getSsrSuspenseTimeout()` controls.
 
+### Continuation lines (`~`)
+
+Beast is indentation-sensitive, so a physical newline normally starts a new
+sibling or child. Prefix an indented line with `~` to append it to the line
+above instead of creating a node.
+
+A continuation line is any non-empty, non-`//` logical line whose first
+content character after its leading spaces is `~`. The parser strips the `~`
+and one optional following space or tab, trims any additional leading
+whitespace, and appends the remainder to the previous logical line with a
+single separating space. The continuation line itself is discarded and has no
+children; its indentation is otherwise ignored.
+
+This keeps the merge independent of the surrounding tree:
+
+```btsx
+// `~ // comment` is a comment continuation and is ignored
+div(className='')
+  ~ // comment
+  p Still a child of the div, not of the comment line
+```
+
+```btsx
+// Long attribute and expression lists can be split without creating children
+Component(items={[
+  ~ 0, 1, 2, 3
+  ~ ]}
+  ~ )
+
+// Equivalent to: Component(items={[ 0, 1, 2, 3 ]})
+```
+
+Rules and diagnostics:
+
+* The `~` must be the first non-space character. `div ~ foo` is not a
+  continuation; `  ~ foo` at column 3 with leading spaces is.
+* One space after `~` is ergonomic and removed (`~ foo` and `~foo` both yield
+  `foo`). Extra leading whitespace beyond that is trimmed before the join.
+* `~` followed by only whitespace, or by `//` after trimming, is a no-op
+  comment/empty continuation and is dropped.
+* Otherwise the trimmed payload is joined with exactly one space:
+  `Component(items={` + `~ 0, 1` -> `Component(items={[ 0, 1`.
+* Multiple continuations chain onto the same predecessor:
+
+```btsx
+Button(
+  ~ tone="primary"
+  ~ disabled
+  ~ onClick={() => save()}
+  ~ ) Save
+```
+
+* Works for any template header - elements, `if`/`elseif`/`each`/`switch`/`try`,
+  pipe text, and dotted components:
+
+```btsx
+if isReady
+  ~ && hasPermission
+  p Ready
+
+each item in items
+  ~ key item.id
+  li #{item.label}
+
+p Hello,
+  ~ world
+// -> p Hello, world
+| Long literal text that
+  ~ continues on the next physical line
+```
+
+* An orphan continuation with no predecessor at the start of the file (or as
+  the first logical line after imports/props/setup) fails with
+  `BEAST1004_ORPHAN_CONTINUATION`.
+
+Tabs in indentation remain rejected, and normal `//` comment lines are still
+omitted before continuation processing. The merged content inherits the span of
+the original line for diagnostics and source maps; continuation lines do not
+produce separate TSRX nodes or extra indentation in generated output.
+
 ### Comments and roots
 
-Lines beginning with `//` are omitted from output. A component with multiple
-root nodes, no root node, a text-only root, or a style-only root is wrapped in
-a TSRX fragment. An authored `fragment` always remains explicit in the output.
+Lines beginning with `//` are omitted from output. Lines beginning with `~ //`
+after the merge are likewise treated as comment continuations and omitted. A
+component with multiple root nodes, no root node, a text-only root, or a
+style-only root is wrapped in a TSRX fragment. An authored `fragment` always
+remains explicit in the output.
 
 ## CLI reference
 

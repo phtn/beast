@@ -900,7 +900,7 @@ function isCatchBranch(content: string): boolean {
 }
 
 function createLogicalLines(source: string, filename: string): LogicalLine[] {
-  const result: LogicalLine[] = [];
+  const rawLines: LogicalLine[] = [];
   let offset = 0;
   const physicalLines = source.split("\n");
   for (let index = 0; index < physicalLines.length; index += 1) {
@@ -918,7 +918,7 @@ function createLogicalLines(source: string, filename: string): LogicalLine[] {
     }
     const content = raw.slice(leading.length).trimEnd();
     if (content.length > 0 && !content.startsWith("//")) {
-      result.push({
+      rawLines.push({
         content,
         indent: leading.length,
         lineNo: index + 1,
@@ -926,6 +926,30 @@ function createLogicalLines(source: string, filename: string): LogicalLine[] {
       });
     }
     offset += raw.length + 1;
+  }
+  const result: LogicalLine[] = [];
+  for (const line of rawLines) {
+    if (line.content.startsWith("~")) {
+      if (result.length === 0) {
+        throw new BeastCompileError({
+          code: "BEAST1004_ORPHAN_CONTINUATION",
+          severity: "error",
+          message: "A continuation line starting with `~` must follow an indented parent line.",
+          filename,
+          span: lineSpan(line),
+        });
+      }
+      let payload = line.content.slice(1);
+      if (payload.startsWith(" ") || payload.startsWith("\t")) payload = payload.slice(1);
+      const trimmed = payload.trimStart();
+      if (trimmed.length === 0) continue;
+      if (trimmed.startsWith("//")) continue;
+      const prev = result[result.length - 1];
+      if (prev === undefined) continue;
+      prev.content += ` ${trimmed}`;
+      continue;
+    }
+    result.push(line);
   }
   return result;
 }
